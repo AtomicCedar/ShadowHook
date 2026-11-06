@@ -91,6 +91,8 @@ __attribute__((always_inline)) int sh_safe_pthread_setspecific(pthread_key_t key
     __asm__("mrs %0, tpidr_el0" : "=r"(tls));
 #elif defined(__arm__)
     __asm__("mrc p15, 0, %0, c13, c0, 3" : "=r"(tls));
+#elif defined(__riscv) && __riscv_xlen == 64
+    __asm__("mv %0, tpidr_el0" : "=r"(tls));
 #endif
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wcast-qual"

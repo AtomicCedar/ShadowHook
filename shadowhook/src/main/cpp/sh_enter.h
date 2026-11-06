@@ -24,7 +24,15 @@
 #pragma once
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void sh_enter_init(void);
 
 uintptr_t sh_enter_alloc(void);
 void sh_enter_free(uintptr_t enter);
+
+#ifdef __cplusplus
+}
+#endif

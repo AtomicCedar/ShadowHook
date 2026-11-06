@@ -48,10 +48,10 @@ typedef struct {
 #define INIT_ITEM(lib_name) {TO_STR(lib_name), 0, NULL, NULL, 0, PTHREAD_MUTEX_INITIALIZER}
 
 static sh_xdl_handle_info_t sh_xdl_handle_info_cache[] = {
-#if defined(__arm__)
-    INIT_ITEM(linker),
-#elif defined(__aarch64__)
+#if defined(__LP64__)
     INIT_ITEM(linker64),
+#else
+    INIT_ITEM(linker),
 #endif
     INIT_ITEM(libc.so),
     INIT_ITEM(libart.so),

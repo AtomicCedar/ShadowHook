@@ -13,7 +13,7 @@ android {
         externalNativeBuild {
             cmake {
                 abiFilters rootProject.ext.abiFilters.split(",")
-                arguments "-DANDROID_STL=none"
+                arguments "-DANDROID_STL=c++_static"
                 if(rootProject.ext.useASAN){
                     arguments "-DANDROID_ARM_MODE=arm"
                     arguments "-DUSEASAN=ON"

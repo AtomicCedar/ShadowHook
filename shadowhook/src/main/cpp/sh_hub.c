@@ -174,6 +174,66 @@ __attribute__((naked)) static void sh_hub_trampo_template(void) {
       ".quad 0;"
       ".L_hub_ptr:"
       ".quad 0;");
+#elif defined(__riscv) && __riscv_xlen == 64
+  __asm__(
+      // Save parameter registers, RA
+      "addi    sp, sp, -136      \n"
+      "sd      a0,    0(sp)      \n"
+      "sd      a1,    8(sp)      \n"
+      "sd      a2,   16(sp)      \n"
+      "sd      a3,   24(sp)      \n"
+      "sd      a4,   32(sp)      \n"
+      "sd      a5,   40(sp)      \n"
+      "sd      a6,   48(sp)      \n"
+      "sd      a7,   56(sp)      \n"
+      "sd      ra,   64(sp)      \n"
+      "fsd     fa0,  72(sp)      \n"
+      "fsd     fa1,  80(sp)      \n"
+      "fsd     fa2,  88(sp)      \n"
+      "fsd     fa3,  96(sp)      \n"
+      "fsd     fa4, 104(sp)      \n"
+      "fsd     fa5, 112(sp)      \n"
+      "fsd     fa6, 120(sp)      \n"
+      "fsd     fa7, 128(sp)      \n"
+
+      // Call sh_hub_push_stack()
+      "ld      a0, .L_hub_ptr    \n"
+      "mv      a1, ra            \n"
+      "ld      t3, .L_push_stack \n"
+      "jalr    t3                \n"
+
+      // Save the hook function's address to IP register
+      "mv      t3, a0            \n"
+
+      // Restore parameter registers, RA
+      "fld     fa7, 128(sp)      \n"
+      "fld     fa6, 120(sp)      \n"
+      "fld     fa5, 112(sp)      \n"
+      "fld     fa4, 104(sp)      \n"
+      "fld     fa3,  96(sp)      \n"
+      "fld     fa2,  88(sp)      \n"
+      "fld     fa1,  80(sp)      \n"
+      "fld     fa0,  72(sp)      \n"
+      "ld      ra,   64(sp)      \n"
+      "ld      a7,   56(sp)      \n"
+      "ld      a6,   48(sp)      \n"
+      "ld      a5,   40(sp)      \n"
+      "ld      a4,   32(sp)      \n"
+      "ld      a3,   24(sp)      \n"
+      "ld      a2,   16(sp)      \n"
+      "ld      a1,    8(sp)      \n"
+      "ld      a0,    0(sp)      \n"
+      "addi    sp, sp, 136       \n"
+
+      // Call hook function
+      "jr      t3                \n"
+
+      "sh_hub_trampo_template_data:"
+      ".global sh_hub_trampo_template_data;"
+      ".L_push_stack:"
+      ".quad 0;"
+      ".L_hub_ptr:"
+      ".quad 0;");
 #endif
 }
 
@@ -293,7 +353,7 @@ static int sh_hub_init(void) {
 #if defined(__thumb__)
   sh_hub_trampo_code_start = SH_UTIL_CLEAR_BIT0(sh_hub_trampo_code_start);
 #endif
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) || (defined(__riscv) && __riscv_xlen == 64)
   sh_hub_trampo_code_start = (uintptr_t)&sh_hub_trampo_template;
   data_start = (uintptr_t)(&sh_hub_trampo_template_data);
 #endif

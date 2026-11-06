@@ -37,8 +37,16 @@
     return (ret);                     \
   } while (0)
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 bool sh_errno_is_invalid(void);
 void sh_errno_reset(void);
 void sh_errno_set(int error_number);
 int sh_errno_get(void);
 const char *sh_errno_to_errmsg(int error_number);
+
+#ifdef __cplusplus
+}
+#endif

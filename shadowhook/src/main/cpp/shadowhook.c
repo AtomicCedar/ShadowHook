@@ -54,10 +54,11 @@
   } while (0)
 
 static bool shadowhook_disable = false;
-static bool shadowhook_has_neon = false;
 static int shadowhook_init_errno = SHADOWHOOK_ERRNO_UNINIT;
 static shadowhook_mode_t shadowhook_default_mode = SHADOWHOOK_MODE_SHARED;
 
+#if defined(__aarch64__) || defined(__arm__)
+static bool shadowhook_has_neon = false;
 __attribute__((always_inline)) static bool shadowhook_check_neon(void) {
 #ifdef __aarch64__
   return true;
@@ -66,6 +67,7 @@ __attribute__((always_inline)) static bool shadowhook_check_neon(void) {
   return (hwcap & HWCAP_NEON) != 0;
 #endif
 }
+#endif
 
 const char *shadowhook_get_version(void) {
   return "shadowhook version " SHADOWHOOK_VERSION;
@@ -100,7 +102,9 @@ int shadowhook_init(shadowhook_mode_t default_mode, bool debuggable) {
       sh_enter_init();
       sh_switch_init();
 
+#if defined(__aarch64__) || defined(__arm__)
       shadowhook_has_neon = shadowhook_check_neon();
+#endif
 
 #undef GOTO_END
 
@@ -618,9 +622,11 @@ uint32_t shadowhook_hash_sysv(const char *sym_name) {
 }
 
 uint32_t shadowhook_hash_gnu(const char *sym_name) {
+#if defined(__aarch64__) || defined(__arm__)
   if (__predict_true(shadowhook_has_neon)) {
     return sh_calculate_gnu_hash_neon(sym_name);
   }
+#endif
   const uint8_t *name_bytes = (const uint8_t *)sym_name;
   uint32_t h = 5381;
   while (*name_bytes) {

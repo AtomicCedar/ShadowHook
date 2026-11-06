@@ -42,7 +42,7 @@
 #define SH_ISLAND_DELAY_SEC      15
 #if defined(__arm__)
 #define SH_ISLAND_SIZE_MAX 8
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) || (defined(__riscv) && __riscv_xlen == 64)
 #define SH_ISLAND_SIZE_MAX 20
 #endif
 

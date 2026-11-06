@@ -27,6 +27,10 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void sh_safe_init(void);
 void sh_safe_set_orig_addr(uintptr_t target_addr, uintptr_t orig_addr);
 
@@ -41,3 +45,7 @@ __attribute__((always_inline)) void *sh_safe_mmap(void *addr, size_t length, int
 __attribute__((always_inline)) int sh_safe_munmap(void *addr, size_t size);
 __attribute__((always_inline)) int sh_safe_prctl(int option, unsigned long arg2, unsigned long arg3,
                                                  unsigned long arg4, unsigned long arg5);
+
+#ifdef __cplusplus
+}
+#endif

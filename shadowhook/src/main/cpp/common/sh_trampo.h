@@ -28,6 +28,10 @@
 
 #include "queue.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct sh_trampo_page {
   uintptr_t ptr;
   SLIST_ENTRY(sh_trampo_page, ) link;
@@ -48,3 +52,7 @@ void sh_trampo_init_mgr(sh_trampo_mgr_t *mgr, const char *anon_page_name, size_t
 uintptr_t sh_trampo_alloc(sh_trampo_mgr_t *mgr);
 uintptr_t sh_trampo_alloc_between(sh_trampo_mgr_t *mgr, uintptr_t range_low, uintptr_t range_high);
 void sh_trampo_free(sh_trampo_mgr_t *mgr, uintptr_t trampo);
+
+#ifdef __cplusplus
+}
+#endif

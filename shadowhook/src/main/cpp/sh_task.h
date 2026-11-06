@@ -27,6 +27,10 @@
 
 #include "shadowhook.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct sh_task sh_task_t;
 
 sh_task_t *sh_task_create_hook_by_target_addr(uintptr_t target_addr, uintptr_t new_addr, uintptr_t *orig_addr,
@@ -50,3 +54,7 @@ void sh_task_destroy(sh_task_t *self);
 
 int sh_task_do(sh_task_t *self);
 int sh_task_undo_and_destroy(sh_task_t *self, uintptr_t caller_addr);
+
+#ifdef __cplusplus
+}
+#endif

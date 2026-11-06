@@ -29,6 +29,10 @@
 #include "sh_recorder.h"
 #include "shadowhook.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void shadowhook_interceptor_caller(void *ctx, shadowhook_cpu_context_t *cpu_context, void **next_hop);
 
 void sh_switch_init(void);
@@ -46,3 +50,7 @@ int sh_switch_unintercept(uintptr_t target_addr, shadowhook_interceptor_t pre, v
                           sh_recorder_trace_t *trace);
 
 void sh_switch_free_after_dlclose(struct dl_phdr_info *info);
+
+#ifdef __cplusplus
+}
+#endif

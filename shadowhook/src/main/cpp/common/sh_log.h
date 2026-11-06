@@ -30,6 +30,10 @@
 
 #include "sh_config.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern android_LogPriority sh_log_priority;
 
 #define SH_LOG_TAG "shadowhook_tag"
@@ -70,3 +74,7 @@ extern android_LogPriority sh_log_priority;
 
 bool sh_log_get_debuggable(void);
 void sh_log_set_debuggable(bool debuggable);
+
+#ifdef __cplusplus
+}
+#endif

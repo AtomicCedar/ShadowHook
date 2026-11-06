@@ -53,6 +53,8 @@
 #define SH_SWITCH_GLUE_LAUNCHER_SZ 20
 #elif defined(__aarch64__)
 #define SH_SWITCH_GLUE_LAUNCHER_SZ 28
+#elif defined(__riscv) && __riscv_xlen == 64
+#define SH_SWITCH_GLUE_LAUNCHER_SZ 34
 #endif
 
 #define SH_SWITCH_HOOK_MODE_NONE   0  // only interceptors
@@ -387,7 +389,7 @@ static int sh_switch_proxy_del_multi(sh_switch_t *self, uintptr_t new_addr, sh_r
 void shadowhook_interceptor_caller(void *ctx, shadowhook_cpu_context_t *cpu_context, void **next_hop) {
   sh_switch_t *self = (sh_switch_t *)ctx;
 
-#if defined(__aarch64__)
+#if defined(__aarch64__) || (defined(__riscv) && __riscv_xlen == 64)
   cpu_context->pc = self->target_addr;
 #elif defined(__arm__)
   cpu_context->regs[15] = SH_UTIL_CLEAR_BIT0(self->target_addr);

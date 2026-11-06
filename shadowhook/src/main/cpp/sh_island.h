@@ -28,6 +28,10 @@
 #include "sh_linker.h"
 #include "sh_recorder.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
   uintptr_t addr;
   size_t size;
@@ -43,3 +47,7 @@ void sh_island_free(sh_island_t *self, uintptr_t load_bias);
 
 void sh_island_free_after_dlclose(sh_island_t *self);
 void sh_island_cleanup_after_dlclose(uintptr_t load_bias);
+
+#ifdef __cplusplus
+}
+#endif

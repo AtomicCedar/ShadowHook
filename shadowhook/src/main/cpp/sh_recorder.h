@@ -37,6 +37,10 @@
 #define SH_RECORDER_OP_UNINTERCEPT             9
 #define SH_RECORDER_OP_HOOK_INVISIBLE_SYM_ADDR 10
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 bool sh_recorder_get_recordable(void);
 void sh_recorder_set_recordable(bool recordable);
 
@@ -58,3 +62,7 @@ int sh_recorder_add_unop(int error_number, uint8_t op, uintptr_t stub, uintptr_t
 
 char *sh_recorder_get(uint32_t item_flags);
 void sh_recorder_dump(int fd, uint32_t item_flags);
+
+#ifdef __cplusplus
+}
+#endif

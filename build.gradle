@@ -15,7 +15,7 @@ ext {
     javaVersion = JavaVersion.VERSION_11
     ndkVersion = "30.0.16248370"
     cmakeVersion = "4.1.2"
-    abiFilters = "armeabi-v7a,arm64-v8a"
+    abiFilters = "armeabi-v7a,arm64-v8a,riscv64"
     useASAN = false
     dependencyOnLocalLibrary = true
     shadowhookVersion = "2.0.1"

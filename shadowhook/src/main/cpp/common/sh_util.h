@@ -59,6 +59,10 @@
 
 #define SH_UTIL_CONTAINER_OF(ptr, type, field) ((type *)((char *)(ptr) - ((char *)&((type *)0)->field)))
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void sh_util_init(void);
 
 // API level
@@ -104,3 +108,7 @@ uint32_t sh_util_arm_expand_imm(uint32_t opcode);
 
 // I/O
 int sh_util_write(int fd, const char *buf, size_t buf_len);
+
+#ifdef __cplusplus
+}
+#endif

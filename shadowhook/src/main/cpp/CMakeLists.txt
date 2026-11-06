@@ -3,14 +3,21 @@ project(shadowhook C CXX ASM)
 
 if(${ANDROID_ABI} STREQUAL "arm64-v8a")
     set(ARCH "arm64")
-    set(ARCH_LINK_FLAGS "-Wl,-z,max-page-size=16384")
 elseif(${ANDROID_ABI} STREQUAL "armeabi-v7a")
     set(ARCH "arm")
-    set(ARCH_LINK_FLAGS "")
+elseif(${ANDROID_ABI} STREQUAL "riscv64")
+    set(ARCH "riscv64")
 endif()
 
 set(TARGET "shadowhook")
-file(GLOB SRC *.c *.cc arch/${ARCH}/*.c arch/${ARCH}/*.S common/*.c)
+file(GLOB SRC *.c *.cc arch/${ARCH}/*.c arch/${ARCH}/*.cc arch/${ARCH}/*.S common/*.c)
+if(${ANDROID_ABI} STREQUAL "riscv64")
+    list(APPEND SRC
+        third_party/berberis/src/base/exec_region.cc
+        third_party/berberis/src/base/mmap_posix.cc
+        third_party/berberis/src/assembler/machine_code.cc
+    )
+endif()
 add_library(${TARGET} SHARED
     ${SRC}
     third_party/xdl/xdl/src/main/cpp/xdl_iterate.c
@@ -32,9 +39,9 @@ target_include_directories(${TARGET} PRIVATE
     third_party/lss
     third_party/xz-embedded/linux/include/linux
     third_party/xz-embedded/userspace
+    third_party/berberis/include
 )
 target_link_libraries(${TARGET} log)
-target_link_options(${TARGET} PRIVATE ${ARCH_LINK_FLAGS})
 if(USEASAN)
     target_compile_options(${TARGET} PRIVATE -fsanitize=address -fno-omit-frame-pointer)
     target_link_options(${TARGET} PRIVATE -fsanitize=address)

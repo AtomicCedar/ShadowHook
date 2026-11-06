@@ -147,13 +147,18 @@ void *shadowhook_hook_sym_name_callback_2(const char *lib_name, const char *sym_
 
 // intercept and unintercept
 typedef union {
-#if defined(__aarch64__)
+#if defined(__aarch64__) || defined(__arm__)
+#if defined(__LP64__)
   __uint128_t q;
 #endif
   uint64_t d[2];
   uint32_t s[4];
   uint16_t h[8];
   uint8_t b[16];
+#elif defined(__riscv) && __riscv_xlen == 64
+  uint64_t d;
+  uint32_t f[2];
+#endif
 } shadowhook_vreg_t;
 
 #if defined(__aarch64__)
@@ -174,6 +179,37 @@ typedef struct {
   // (1) NEON, VFPv4, VFPv3-D32: q0-q15(d0-d31)
   // (2) VFPv3-D16: q0-q7(d0-d15)
   shadowhook_vreg_t vregs[16];
+} shadowhook_cpu_context_t;
+#elif defined(__riscv) && __riscv_xlen == 64
+typedef struct {
+  uint64_t ra, sp, gp, tp;
+  uint64_t t0, t1, t2;
+  union {
+    uint64_t s0;
+    uint64_t fp;
+  };
+  uint64_t s1;
+  uint64_t a0, a1, a2, a3, a4, a5, a6, a7;
+  uint64_t s2, s3, s4, s5, s6, s7, s8, s9, s10, s11;
+  uint64_t t3, t4, t5, t6;
+
+  uint64_t pc;
+  struct {
+    uint64_t vstart;
+    uint64_t vl;
+    uint64_t vtype;
+    uint64_t vcsr;
+    uint64_t vlenb;
+    uint64_t datap;
+  } vstate;
+
+  shadowhook_vreg_t ft0, ft1, ft2, ft3, ft4, ft5, ft6, ft7;
+  shadowhook_vreg_t fs0, fs1;
+  shadowhook_vreg_t fa0, fa1, fa2, fa3, fa4, fa5, fa6, fa7;
+  shadowhook_vreg_t fs2, fs3, fs4, fs5, fs6, fs7, fs8, fs9, fs10, fs11;
+  shadowhook_vreg_t ft8, ft9, ft10, ft11;
+
+  uint32_t fcsr;
 } shadowhook_cpu_context_t;
 #endif
 

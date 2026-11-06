@@ -30,6 +30,10 @@
 
 #include "queue.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct sh_ref {
   pthread_mutex_t lock;
   int count;
@@ -64,3 +68,7 @@ typedef struct {
   {TAILQ_HEAD_INITIALIZER((self).queue), PTHREAD_MUTEX_INITIALIZER, (destroy), (delay_sec)}
 
 void sh_ref_delayed_destroy(sh_ref_t *self, sh_ref_mgr_t *mgr);
+
+#ifdef __cplusplus
+}
+#endif

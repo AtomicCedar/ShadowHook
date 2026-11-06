@@ -30,6 +30,10 @@
 #include "sh_util.h"
 #include "shadowhook.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // linker utils
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wpadded"
@@ -53,3 +57,7 @@ int sh_linker_copy_addr_info(sh_addr_info_t *addr_info, sh_addr_info_t *copy);
 
 bool sh_linker_is_addr_in_elf_pt_load(uintptr_t addr, void *dli_fbase, const ElfW(Phdr) *dlpi_phdr,
                                       size_t dlpi_phnum);
+
+#ifdef __cplusplus
+}
+#endif

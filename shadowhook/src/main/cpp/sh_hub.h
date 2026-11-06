@@ -27,6 +27,10 @@
 
 #include "sh_recorder.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct sh_hub sh_hub_t;
 
 void sh_hub_record(sh_hub_t *self, sh_recorder_trace_t *trace);
@@ -47,3 +51,7 @@ void sh_hub_pop_stack(void *return_address);
 void sh_hub_allow_reentrant(void *return_address);
 void sh_hub_disallow_reentrant(void *return_address);
 void *sh_hub_get_return_address(void);
+
+#ifdef __cplusplus
+}
+#endif

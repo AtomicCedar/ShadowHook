@@ -34,6 +34,7 @@
 // used to hash strings in an ELF file's string table, where MTE is presumably unaware of the
 // bounds of each symbol, but the linker also hashes the symbol name passed to dlsym.
 
+#if defined(__aarch64__) || defined(__arm__)
 #include "sh_gnu_hash_neon.h"
 
 #include <arm_neon.h>
@@ -215,3 +216,4 @@ sh_calculate_gnu_hash_neon(const char *name) {
 
   return hash;
 }
+#endif

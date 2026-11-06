@@ -8,12 +8,13 @@ path_list = ['shadowhook/src/main/cpp/include',
              'shadowhook/src/main/cpp',
              'shadowhook/src/main/cpp/arch/arm',
              'shadowhook/src/main/cpp/arch/arm64',
+             'shadowhook/src/main/cpp/arch/riscv64',
              'shadowhook/src/main/cpp/common',
              'app/src/main/cpp/unittest',
              'app/src/main/cpp/hookee',
              'app/src/main/cpp/hookee2',
              'systest/src/main/cpp']
-suffix_tuple = ('.h', '.c')
+suffix_tuple = ('.h', '.c', '.cc')
 
 def main():
     parser = argparse.ArgumentParser(description='clang-format runner')
