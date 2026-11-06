@@ -1,0 +1,59 @@
+name: build
+
+on:
+  push:
+    branches: [AtomicCedar]
+    paths:
+      - 'shadowhook/**'
+      - '.github/workflows/build.yml'
+  pull_request:
+    branches: [AtomicCedar]
+    paths:
+      - 'shadowhook/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: build shadowhook
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: set up Gradle cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: set up NDK r23b
+        uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r23b
+          add-to-path: false
+
+      - name: build
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: ./gradlew :shadowhook:assembleRelease --stacktrace
+
+      - name: upload AAR
+        uses: actions/upload-artifact@v7
+        with:
+          name: shadowhook
+          path: shadowhook/build/outputs/aar/*.aar
+          if-no-files-found: error
