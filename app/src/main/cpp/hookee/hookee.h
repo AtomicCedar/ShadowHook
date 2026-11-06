@@ -127,8 +127,15 @@ int test_a64_instr_cbz(int a, int b);
 int test_a64_instr_tbz(int a, int b);
 int test_a64_ldr_x17(int a, int b);
 int test_a64_adrp_add_x17(int a, int b);
+int test_a64_sym_offset(int a, int b);
+int test_a64_sym_offset_neg(int a, int b);
 
 #endif
+
+// systest targets for intercept by symbol + instruction offset (thumb)
+int test_t16_sym_offset(int a, int b);
+int test_t16_sym_offset_it(int a, int b);
+int test_t16_sym_offset_t32(int a, int b);
 
 int test_recursion_1(int a, int b);
 int test_recursion_2(int a, int b);

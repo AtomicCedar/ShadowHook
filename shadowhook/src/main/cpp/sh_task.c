@@ -293,7 +293,8 @@ static void sh_task_do_pending(sh_task_t *task, struct dl_phdr_info *info, void 
   // do hook or intercept
   sh_recorder_trace_t trace = SH_RECORDER_TRACE_INITIALIZER;
   if (0 == r) {
-    task->target_addr = (uintptr_t)addr_info.dli_saddr + task->sym_offset;
+    task->target_addr =
+        (uintptr_t)addr_info.dli_saddr + task->sym_offset;  // dli_saddr keeps its thumb bit if any
     if (0 != task->sym_offset) {
       r = sh_bound_check((uintptr_t)addr_info.dli_saddr, addr_info.dli_ssize, task->sym_offset);
       if (0 == r && SH_TASK_HOOK == task->type)
@@ -453,7 +454,8 @@ int sh_task_do(sh_task_t *self) {
     if (0 != self->sym_offset &&
         0 != (r = sh_bound_check((uintptr_t)addr_info.dli_saddr, addr_info.dli_ssize, self->sym_offset)))
       goto end;
-    self->target_addr = (uintptr_t)addr_info.dli_saddr + self->sym_offset;
+    self->target_addr =
+        (uintptr_t)addr_info.dli_saddr + self->sym_offset;  // dli_saddr keeps its thumb bit if any
   } else {
     addr_info.is_sym_addr = self->is_sym_addr;
     addr_info.is_proc_start = self->is_proc_start;

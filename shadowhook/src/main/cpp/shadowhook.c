@@ -453,6 +453,7 @@ void *shadowhook_intercept_sym_addr_offset(void *sym_addr, size_t offset, shadow
   sh_errno_reset();
 
   // validate offset against instruction boundaries before hooking
+  // (clear the thumb bit for validation; keep it in the hook target address)
   sh_addr_info_t addr_info;
   memset(&addr_info, 0, sizeof(sh_addr_info_t));
   int r;
@@ -460,7 +461,7 @@ void *shadowhook_intercept_sym_addr_offset(void *sym_addr, size_t offset, shadow
     r = SHADOWHOOK_ERRNO_INVALID_ARG;
   } else if (0 != (r = sh_linker_get_addr_info_by_addr(&addr_info, sym_addr, true, true, false))) {
     // addr_info filled for logging only; fall through
-  } else if (0 != (r = sh_bound_check((uintptr_t)sym_addr, addr_info.dli_ssize, offset))) {
+  } else if (0 != (r = sh_bound_check(SH_UTIL_CLEAR_BIT0((uintptr_t)sym_addr), addr_info.dli_ssize, offset))) {
     // fall through
   } else {
     r = 0;

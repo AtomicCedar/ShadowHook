@@ -578,7 +578,155 @@ static int intercept_instr(void) {
 #endif
 }
 
-// test hook
+// intercept by symbol + instruction offset (systest for the *_offset APIs)
+static void *stub_intercept_sym_offset = NULL;
+static void interceptor_sym_offset(shadowhook_cpu_context_t *ctx, void *data) {
+  (void)data;
+  if (__predict_false(!unittest_is_benchmark))
+    LOG("interceptor : %-21s : %" PRIxPTR " + %" PRIxPTR " = ?", "sym_offset", ctx->regs[0], ctx->regs[1]);
+}
+
+static void *stub_intercept_sym_offset_neg = NULL;
+static void interceptor_sym_offset_neg(shadowhook_cpu_context_t *ctx, void *data) {
+  (void)data;
+  if (__predict_false(!unittest_is_benchmark))
+    LOG("interceptor : %-21s : %" PRIxPTR " + %" PRIxPTR " = ?", "sym_offset_neg", ctx->regs[0], ctx->regs[1]);
+}
+
+static int intercept_sym_offset(void) {
+#if defined(__aarch64__)
+  // positive: every valid instruction position of test_a64_sym_offset
+  static const size_t ok_offsets[] = {0, 4, 8, 12, 16};  // 20 is the literal pool
+  for (size_t i = 0; i < sizeof(ok_offsets) / sizeof(ok_offsets[0]); i++) {
+    size_t off = ok_offsets[i];
+    void *stub = shadowhook_intercept_sym_addr_offset((void *)test_a64_sym_offset, off,
+                                                      interceptor_sym_offset, NULL,
+                                                      unittest_interceptor_flags);
+    if (NULL == stub) {
+      LOG("unittest: intercept sym_addr_offset FAILED: test_a64_sym_offset+%zu. errno %d", off,
+          shadowhook_get_errno());
+      return -1;
+    }
+    if (0 != shadowhook_unintercept(stub) && SHADOWHOOK_ERRNO_UNHOOK_ON_UNFINISHED != shadowhook_get_errno()) {
+      LOG("unittest: unintercept sym_addr_offset FAILED: test_a64_sym_offset+%zu. errno %d", off,
+          shadowhook_get_errno());
+      return -1;
+    }
+  }
+
+  // keep one stub for the run phase; hooking offset 12 (LDR X17, the PR #126 pattern)
+  if (NULL != stub_intercept_sym_offset) return -1;
+  stub_intercept_sym_offset = shadowhook_intercept_sym_addr_offset(
+      (void *)test_a64_sym_offset, 12, interceptor_sym_offset, NULL, unittest_interceptor_flags);
+  if (NULL == stub_intercept_sym_offset) {
+    LOG("unittest: intercept sym_addr_offset FAILED: test_a64_sym_offset+12. errno %d",
+        shadowhook_get_errno());
+    return -1;
+  }
+
+  // also verify the by-name variant (pending-style path)
+  void *stub_by_name = shadowhook_intercept_sym_offset("libhookee.so", "test_a64_sym_offset_neg", 4,
+                                                       interceptor_sym_offset_neg, NULL,
+                                                       unittest_interceptor_flags);
+  if (NULL == stub_by_name) {
+    LOG("unittest: intercept sym_offset FAILED: libhookee.so test_a64_sym_offset_neg+4. errno %d",
+        shadowhook_get_errno());
+    return -1;
+  }
+  stub_intercept_sym_offset_neg = stub_by_name;
+
+  // negative: unaligned offset, out-of-symbol offset must fail with errno 46
+  static const size_t bad_offsets[] = {2, 24, 100};
+  for (size_t i = 0; i < sizeof(bad_offsets) / sizeof(bad_offsets[0]); i++) {
+    size_t off = bad_offsets[i];
+    if (NULL != shadowhook_intercept_sym_addr_offset((void *)test_a64_sym_offset_neg, off,
+                                                     interceptor_sym_offset_neg, NULL,
+                                                     unittest_interceptor_flags)) {
+      LOG("unittest: intercept sym_addr_offset unexpectedly SUCCEEDED: test_a64_sym_offset_neg+%zu", off);
+      return -1;
+    }
+    if (SHADOWHOOK_ERRNO_BAD_OFFSET != shadowhook_get_errno()) {
+      LOG("unittest: intercept sym_addr_offset unexpected errno %d (want %d): +%zu",
+          shadowhook_get_errno(), SHADOWHOOK_ERRNO_BAD_OFFSET, off);
+      return -1;
+    }
+  }
+  return 0;
+
+#elif defined(__arm__)
+  // positive: valid T16 boundaries of test_t16_sym_offset (0..8); 10 is the literal pool
+  static const size_t ok_offsets[] = {0, 2, 4, 6, 8};
+  for (size_t i = 0; i < sizeof(ok_offsets) / sizeof(ok_offsets[0]); i++) {
+    size_t off = ok_offsets[i];
+    void *stub = shadowhook_intercept_sym_addr_offset((void *)test_t16_sym_offset, off,
+                                                      interceptor_sym_offset, NULL,
+                                                      unittest_interceptor_flags);
+    if (NULL == stub) {
+      LOG("unittest: intercept sym_addr_offset FAILED: test_t16_sym_offset+%zu. errno %d", off,
+          shadowhook_get_errno());
+      return -1;
+    }
+    if (0 != shadowhook_unintercept(stub) && SHADOWHOOK_ERRNO_UNHOOK_ON_UNFINISHED != shadowhook_get_errno()) {
+      LOG("unittest: unintercept sym_addr_offset FAILED: test_t16_sym_offset+%zu. errno %d", off,
+          shadowhook_get_errno());
+      return -1;
+    }
+  }
+
+  // keep one stub for the run phase: offset 2 (the add instruction)
+  if (NULL != stub_intercept_sym_offset) return -1;
+  stub_intercept_sym_offset = shadowhook_intercept_sym_addr_offset(
+      (void *)test_t16_sym_offset, 2, interceptor_sym_offset, NULL, unittest_interceptor_flags);
+  if (NULL == stub_intercept_sym_offset) {
+    LOG("unittest: intercept sym_addr_offset FAILED: test_t16_sym_offset+2. errno %d",
+        shadowhook_get_errno());
+    return -1;
+  }
+
+  // by-name variant
+  void *stub_by_name = shadowhook_intercept_sym_offset("libhookee.so", "test_t16_sym_offset_it", 0,
+                                                       interceptor_sym_offset_neg, NULL,
+                                                       unittest_interceptor_flags);
+  if (NULL == stub_by_name) {
+    LOG("unittest: intercept sym_offset FAILED: libhookee.so test_t16_sym_offset_it+0. errno %d",
+        shadowhook_get_errno());
+    return -1;
+  }
+  stub_intercept_sym_offset_neg = stub_by_name;
+
+  // negative: inside IT block (offset 4 of test_t16_sym_offset_it), middle of
+  // a T32 instruction (offset 4 of test_t16_sym_offset_t32), out of range
+  static const size_t bad_it_offsets[] = {4};
+  for (size_t i = 0; i < sizeof(bad_it_offsets) / sizeof(bad_it_offsets[0]); i++) {
+    if (NULL != shadowhook_intercept_sym_addr_offset((void *)test_t16_sym_offset_it, bad_it_offsets[i],
+                                                     interceptor_sym_offset_neg, NULL,
+                                                     unittest_interceptor_flags)) {
+      LOG("unittest: intercept sym_addr_offset unexpectedly SUCCEEDED: it+%zu", bad_it_offsets[i]);
+      return -1;
+    }
+    if (SHADOWHOOK_ERRNO_BAD_OFFSET != shadowhook_get_errno()) {
+      LOG("unittest: intercept sym_addr_offset unexpected errno %d (want %d): it+%zu",
+          shadowhook_get_errno(), SHADOWHOOK_ERRNO_BAD_OFFSET, bad_it_offsets[i]);
+      return -1;
+    }
+  }
+  static const size_t bad_t32_offsets[] = {4, 100};
+  for (size_t i = 0; i < sizeof(bad_t32_offsets) / sizeof(bad_t32_offsets[0]); i++) {
+    if (NULL != shadowhook_intercept_sym_addr_offset((void *)test_t16_sym_offset_t32, bad_t32_offsets[i],
+                                                     interceptor_sym_offset_neg, NULL,
+                                                     unittest_interceptor_flags)) {
+      LOG("unittest: intercept sym_addr_offset unexpectedly SUCCEEDED: t32+%zu", bad_t32_offsets[i]);
+      return -1;
+    }
+    if (SHADOWHOOK_ERRNO_BAD_OFFSET != shadowhook_get_errno()) {
+      LOG("unittest: intercept sym_addr_offset unexpected errno %d (want %d): t32+%zu",
+          shadowhook_get_errno(), SHADOWHOOK_ERRNO_BAD_OFFSET, bad_t32_offsets[i]);
+      return -1;
+    }
+  }
+  return 0;
+#endif
+}
 static int unittest_hook(int api_level) {
   (void)api_level;
   //  if (api_level < __ANDROID_API_L__) {
@@ -952,6 +1100,10 @@ static int unittest_intercept(void) {
       LOG("intercept instruction FAILED");
       return -1;
     }
+    if (0 != intercept_sym_offset()) {
+      LOG("intercept sym offset FAILED");
+      return -1;
+    }
   }
 
   INTERCEPT_WITH_TAG(op_multi_times_shared, _1);
@@ -1135,6 +1287,23 @@ int unittest_unintercept(void) {
   UNINTERCEPT(op_before_dlopen_1);
   UNINTERCEPT(op_before_dlopen_2);
 
+  if (NULL != stub_intercept_sym_offset) {
+    if (0 != shadowhook_unintercept(stub_intercept_sym_offset) &&
+        SHADOWHOOK_ERRNO_UNHOOK_ON_UNFINISHED != shadowhook_get_errno()) {
+      LOG("unittest: unintercept sym_offset FAILED. errno %d", shadowhook_get_errno());
+      return -1;
+    }
+    stub_intercept_sym_offset = NULL;
+  }
+  if (NULL != stub_intercept_sym_offset_neg) {
+    if (0 != shadowhook_unintercept(stub_intercept_sym_offset_neg) &&
+        SHADOWHOOK_ERRNO_UNHOOK_ON_UNFINISHED != shadowhook_get_errno()) {
+      LOG("unittest: unintercept sym_offset_neg FAILED. errno %d", shadowhook_get_errno());
+      return -1;
+    }
+    stub_intercept_sym_offset_neg = NULL;
+  }
+
   return 0;
 }
 
@@ -1251,6 +1420,16 @@ int unittest_run(bool hookee2_loaded) {
   RUN(a64_instr_bl);
   RUN(a64_instr_cbz);
   RUN(a64_instr_tbz);
+#endif
+
+  LOG(DELIMITER, "TEST - intercept by symbol offset");
+#if defined(__arm__)
+  RUN(t16_sym_offset);
+  RUN(t16_sym_offset_it);
+  RUN(t16_sym_offset_t32);
+#elif defined(__aarch64__)
+  RUN(a64_sym_offset);
+  RUN(a64_sym_offset_neg);
 #endif
 
   LOG(DELIMITER, "TEST - recursion");

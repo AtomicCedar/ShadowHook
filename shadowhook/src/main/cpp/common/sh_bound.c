@@ -34,6 +34,9 @@
 
 int sh_bound_check(uintptr_t sym_addr, size_t sym_size, size_t offset) {
   if (0 == sym_addr) return SHADOWHOOK_ERRNO_NOT_FOUND;
+#ifndef __aarch64__
+  sym_addr &= ~(uintptr_t)1;  // clear the thumb bit of the symbol address
+#endif
   if (offset >= sym_size) {
     SH_LOG_WARN("sh_bound_check: offset %zu out of symbol size %zu", offset, sym_size);
     return SHADOWHOOK_ERRNO_BAD_OFFSET;
