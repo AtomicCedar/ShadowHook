@@ -1,7 +1,7 @@
 # **shadowhook**
 
 ![](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat)
-![](https://img.shields.io/badge/release-2.0.1-red.svg?style=flat)
+![](https://img.shields.io/badge/release-2.0.2-red.svg?style=flat)
 ![](https://img.shields.io/badge/Android-4.1%20--%2017-blue.svg?style=flat)
 ![](https://img.shields.io/badge/arch-armeabi--v7a%20%7C%20arm64--v8a-blue.svg?style=flat)
 
@@ -37,6 +37,19 @@
 - 支持绕过 linker namespace 的限制，查询进程中所有 ELF 的 `.dynsym` 和 `.symtab` 中的符号地址。
 - 在 hook 代理函数和 intercept 拦截器函数中，兼容 CFI unwind 和 FP unwind。
 - 使用 MIT 许可证授权。
+
+
+## 发布说明
+
+**v2.0.2**
+
+- 新增符号内任意指令位置 intercept：`shadowhook_intercept_sym_addr_offset()` 和 `shadowhook_intercept_sym_offset()`，下钩前做指令边界校验（新增错误码 `46 - Invalid instruction offset in symbol`）。
+- `shadowhook_init()` 新增 `nothing_fd` 参数，Java 层新增 `ConfigBuilder.setNothingFd()`：通过 `android_dlopen_ext` 从 memfd 加载 `libshadowhook_nothing.so`，不再从磁盘读取。
+- 修复：linker 初始化失败不再导致整体初始化失败（提升在更新版本 Android 上的兼容性）。
+- 修复：使用 `pthread_once` 保证初始化线程安全。
+- 修复：从 xDL dev 移植路径匹配与 IFUNC 初始化竞态修复。
+- 新增 arm64 与 thumb 的 intercept-by-symbol-offset systest 覆盖。
+- 新增 CI：GitHub Actions 构建工作流，支持手动触发。
 
 
 ## 文档

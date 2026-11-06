@@ -1,7 +1,7 @@
 # **shadowhook**
 
 ![](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat)
-![](https://img.shields.io/badge/release-2.0.1-red.svg?style=flat)
+![](https://img.shields.io/badge/release-2.0.2-red.svg?style=flat)
 ![](https://img.shields.io/badge/Android-4.1%20--%2017-blue.svg?style=flat)
 ![](https://img.shields.io/badge/arch-armeabi--v7a%20%7C%20arm64--v8a-blue.svg?style=flat)
 
@@ -37,6 +37,19 @@
 - Supports bypassing linker namespace restrictions to query symbol addresses in `.dynsym` and `.symtab` of all ELFs in the process.
 - Compatible with CFI unwind and FP unwind in hook proxy functions and interceptor functions.
 - Licensed under the MIT license.
+
+
+## Release Notes
+
+**v2.0.2**
+
+- Added intercept at an arbitrary instruction position inside a symbol: `shadowhook_intercept_sym_addr_offset()` and `shadowhook_intercept_sym_offset()`, with instruction-boundary validation before hooking (new errno `46 - Invalid instruction offset in symbol`).
+- Added `nothing_fd` parameter to `shadowhook_init()` and `ConfigBuilder.setNothingFd()` in Java: load `libshadowhook_nothing.so` from a memfd via `android_dlopen_ext` instead of from disk.
+- Fixed: linker initialization failure is no longer fatal (improves compatibility with newer Android versions).
+- Fixed: thread-safe initialization with `pthread_once`.
+- Fixed: ported xDL pathname matching and IFUNC initialization race fixes from xDL dev.
+- Added systest coverage for intercept-by-symbol-offset on arm64 and thumb.
+- Added CI: GitHub Actions build workflow with manual dispatch.
 
 
 ## Documentation
