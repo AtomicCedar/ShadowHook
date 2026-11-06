@@ -400,6 +400,12 @@ static void sh_task_dl_fini_post(struct dl_phdr_info *info, size_t size, void *d
 }
 
 int sh_task_init(void) {
+#if defined(SHADOWHOOK_BH_STATIC_SINGLE_SO)
+  SH_LOG_INFO(
+      "task: linker monitor disabled by SHADOWHOOK_BH_STATIC_SINGLE_SO; pending symbol-name tasks are "
+      "unsupported");
+  return 0;
+#endif
 #ifdef SH_CONFIG_COMPATIBLE_WITH_ARM_ANDROID_4_X
   if (__predict_false(sh_util_get_api_level() < __ANDROID_API_L__)) {
     SH_LOG_INFO("task: start linker dlopen monitor ...");

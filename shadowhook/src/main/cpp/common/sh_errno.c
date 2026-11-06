@@ -30,14 +30,22 @@
 
 static int sh_errno_global = SHADOWHOOK_ERRNO_INIT_ERRNO;
 static pthread_key_t sh_errno_tls_key;
+static pthread_once_t sh_errno_once = PTHREAD_ONCE_INIT;
 
-__attribute__((constructor)) static void sh_errno_ctor(void) {
+static void sh_errno_init_once(void) {
   if (__predict_true(0 == pthread_key_create(&sh_errno_tls_key, NULL))) {
     sh_errno_global = SHADOWHOOK_ERRNO_OK;
   }
 }
 
+__attribute__((constructor)) static void sh_errno_ctor(void) {
+  pthread_once(&sh_errno_once, sh_errno_init_once);
+}
+
 bool sh_errno_is_invalid(void) {
+  if (__predict_false(sh_errno_global == SHADOWHOOK_ERRNO_INIT_ERRNO)) {
+    pthread_once(&sh_errno_once, sh_errno_init_once);
+  }
   return __predict_false(sh_errno_global == SHADOWHOOK_ERRNO_INIT_ERRNO);
 }
 
@@ -46,7 +54,10 @@ void sh_errno_reset(void) {
 }
 
 void sh_errno_set(int error_number) {
-  if (__predict_false(sh_errno_global == SHADOWHOOK_ERRNO_INIT_ERRNO)) return;
+  if (__predict_false(sh_errno_global == SHADOWHOOK_ERRNO_INIT_ERRNO)) {
+    pthread_once(&sh_errno_once, sh_errno_init_once);
+    if (__predict_false(sh_errno_global == SHADOWHOOK_ERRNO_INIT_ERRNO)) return;
+  }
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wint-to-void-pointer-cast"
@@ -55,7 +66,10 @@ void sh_errno_set(int error_number) {
 }
 
 int sh_errno_get(void) {
-  if (__predict_false(sh_errno_global == SHADOWHOOK_ERRNO_INIT_ERRNO)) return sh_errno_global;
+  if (__predict_false(sh_errno_global == SHADOWHOOK_ERRNO_INIT_ERRNO)) {
+    pthread_once(&sh_errno_once, sh_errno_init_once);
+    if (__predict_false(sh_errno_global == SHADOWHOOK_ERRNO_INIT_ERRNO)) return sh_errno_global;
+  }
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wvoid-pointer-to-int-cast"
@@ -84,7 +98,7 @@ const char *sh_errno_to_errmsg(int error_number) {
                               /* 17 */ "Open ELF crashed",
                               /* 18 */ "Find symbol in ELF failed",
                               /* 19 */ "Find symbol in ELF crashed",
-                              /* 20 */ "Duplicate unique ook",
+                              /* 20 */ "Duplicate unique hook",
                               /* 21 */ "Dladdr crashed",
                               /* 22 */ "Find dlinfo failed",
                               /* 23 */ "Symbol size too small",

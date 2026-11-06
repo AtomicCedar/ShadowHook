@@ -37,7 +37,7 @@ static jstring sh_jni_get_version(JNIEnv *env, jobject thiz) {
   return (*env)->NewStringUTF(env, shadowhook_get_version());
 }
 
-static jint sh_jni_init(JNIEnv *env, jobject thiz, jint mode, jboolean debuggable) {
+static jint sh_jni_init(JNIEnv *env, jobject thiz, jint mode, jboolean debuggable, jint nothing_fd) {
   (void)env, (void)thiz;
 
   shadowhook_mode_t enum_mode;
@@ -50,7 +50,7 @@ static jint sh_jni_init(JNIEnv *env, jobject thiz, jint mode, jboolean debuggabl
   else
     return SHADOWHOOK_ERRNO_INVALID_ARG;
 
-  return shadowhook_init(enum_mode, (bool)debuggable);
+  return shadowhook_init(enum_mode, (bool)debuggable, (int)nothing_fd);
 }
 
 static jint sh_jni_get_init_errno(JNIEnv *env, jobject thiz) {
@@ -151,7 +151,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
   if (__predict_false(NULL == (cls = (*env)->FindClass(env, SH_JNI_CLASS_NAME)))) return JNI_ERR;
 
   JNINativeMethod m[] = {{"nativeGetVersion", "()Ljava/lang/String;", (void *)sh_jni_get_version},
-                         {"nativeInit", "(IZ)I", (void *)sh_jni_init},
+                         {"nativeInit", "(IZI)I", (void *)sh_jni_init},
                          {"nativeGetInitErrno", "()I", (void *)sh_jni_get_init_errno},
                          {"nativeGetMode", "()I", (void *)sh_jni_get_mode},
                          {"nativeGetDebuggable", "()Z", (void *)sh_jni_get_debuggable},

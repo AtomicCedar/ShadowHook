@@ -77,7 +77,7 @@ public final class ShadowHook {
             if (config.getRecordable()) {
                 nativeSetRecordable(config.getRecordable());
             }
-            initErrno = nativeInit(config.getMode(), config.getDebuggable());
+            initErrno = nativeInit(config.getMode(), config.getDebuggable(), config.getNothingFd());
         } catch (Throwable ignored) {
             initErrno = ERRNO_INIT_EXCEPTION;
         }
@@ -250,7 +250,7 @@ public final class ShadowHook {
 
     private static native String nativeGetVersion();
 
-    private static native int nativeInit(int mode, boolean debuggable);
+    private static native int nativeInit(int mode, boolean debuggable, int nothingFd);
 
     private static native int nativeGetInitErrno();
 
@@ -313,6 +313,7 @@ public final class ShadowHook {
         private boolean debuggable;
         private boolean recordable;
         private boolean disable;
+        private int nothingFd;
 
         public Config() {
         }
@@ -355,6 +356,19 @@ public final class ShadowHook {
         public boolean getDisable() {
             return this.disable;
         }
+
+        /**
+         * Set a memfd fd whose content is the libshadowhook_nothing.so ELF.
+         * The fd will be consumed by android_dlopen_ext and closed by the
+         * system linker on dlclose; pass -1 (default) to load from disk.
+         */
+        public void setNothingFd(int nothingFd) {
+            this.nothingFd = nothingFd;
+        }
+
+        public int getNothingFd() {
+            return this.nothingFd;
+        }
     }
 
     public static class ConfigBuilder {
@@ -364,6 +378,7 @@ public final class ShadowHook {
         private boolean debuggable = defaultDebuggable;
         private boolean recordable = defaultRecordable;
         private boolean disable = defaultDisable;
+        private int nothingFd = -1;
 
         public ConfigBuilder() {
         }
@@ -393,6 +408,11 @@ public final class ShadowHook {
             return this;
         }
 
+        public ConfigBuilder setNothingFd(int nothingFd) {
+            this.nothingFd = nothingFd;
+            return this;
+        }
+
         public Config build() {
             Config config = new Config();
             config.setLibLoader(libLoader);
@@ -400,6 +420,7 @@ public final class ShadowHook {
             config.setDebuggable(debuggable);
             config.setRecordable(recordable);
             config.setDisable(disable);
+            config.setNothingFd(nothingFd);
             return config;
         }
     }

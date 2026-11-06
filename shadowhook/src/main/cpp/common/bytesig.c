@@ -68,8 +68,9 @@ typedef int (*bytesig_sigprocmask_t)(int, const sigset_t *, sigset_t *);
 
 static void *bytesig_sigaction;    // point to libc's sigaction64() or libc's sigaction()
 static void *bytesig_sigprocmask;  // point to libc's sigprocmask() or libc's sigprocmask64()
+static pthread_once_t bytesig_once = PTHREAD_ONCE_INIT;
 
-__attribute__((constructor)) static void bytesig_ctor(void) {
+static void bytesig_init_once(void) {
   void *libc = dlopen("libc.so", RTLD_LOCAL);
   if (__predict_false(NULL == libc)) return;
 
@@ -89,6 +90,10 @@ __attribute__((constructor)) static void bytesig_ctor(void) {
 
 end:
   dlclose(libc);
+}
+
+__attribute__((constructor)) static void bytesig_ctor(void) {
+  pthread_once(&bytesig_once, bytesig_init_once);
 }
 
 #define BYTESIG_PROTECTED_THREADS_MAX 256
@@ -187,6 +192,9 @@ static void bytesig_handler(int signum, siginfo_t *siginfo, void *context) {
 }
 
 int bytesig_init(int signum) {
+  if (__predict_false(BYTESIG_STATUS_UNAVAILABLE == bytesig_status)) {
+    pthread_once(&bytesig_once, bytesig_init_once);
+  }
   if (__predict_false(signum <= 0 || signum >= __SIGRTMIN || signum == SIGKILL || signum == SIGSTOP))
     return -1;
   if (__predict_false(BYTESIG_STATUS_UNAVAILABLE == bytesig_status)) return -1;
