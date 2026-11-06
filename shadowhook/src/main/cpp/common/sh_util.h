@@ -62,7 +62,14 @@
 void sh_util_init(void);
 
 // API level
-int sh_util_get_api_level(void);
+__attribute__((const)) int __sh_util_get_api_level(void);
+
+#define sh_util_get_api_level()                               \
+  ({                                                          \
+    int __sh_util_api_level = __sh_util_get_api_level();      \
+    __builtin_assume(__sh_util_api_level >= __ANDROID_API__); \
+    __sh_util_api_level;                                      \
+  })
 
 // ARM CPU features
 #if defined(__arm__)

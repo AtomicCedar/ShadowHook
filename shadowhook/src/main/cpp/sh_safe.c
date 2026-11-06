@@ -25,21 +25,13 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <sys/types.h>
 
+#include "sh_lss.h"
 #include "sh_util.h"
 #include "sh_xdl.h"
 #include "xdl.h"
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wreserved-id-macro"
-#pragma clang diagnostic ignored "-Wvariadic-macros"
-#pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
-#pragma clang diagnostic ignored "-Wsign-conversion"
-#pragma clang diagnostic ignored "-Wpacked"
-#pragma clang diagnostic ignored "-Wshorten-64-to-32"
-#pragma clang diagnostic ignored "-Wpadded"
-#include "linux_syscall_support.h"
-#pragma clang diagnostic pop
 
 #define SH_SAFE_IDX_PTHREAD_GETSPECIFIC  0
 #define SH_SAFE_IDX_PTHREAD_SETSPECIFIC  1
@@ -53,38 +45,17 @@ typedef struct {
   uintptr_t orig_addr;
 } sh_safe_addr_t;
 static sh_safe_addr_t sh_safe_addrs[SH_SAFE_IDX_SZ];
-static int sh_safe_api_level;
 
-static int sh_safe_init_func(void *handle, const char *symbol, size_t idx) {
-  sh_safe_addrs[idx].target_addr = (uintptr_t)(xdl_sym(handle, symbol, NULL));
-  if (__predict_false(0 == sh_safe_addrs[idx].target_addr)) return -1;
-  sh_safe_addrs[idx].orig_addr = 0;
-  return 0;
+static void sh_safe_init_func(size_t idx, void *target_addr) {
+  sh_safe_addrs[idx].target_addr = (uintptr_t)target_addr;
 }
 
-int sh_safe_init(void) {
-  sh_safe_api_level = sh_util_get_api_level();
-
-  // You can also use dlopen(), but dlopen() is more likely to have been hooked.
-  void *handle = sh_xdl_open("libc.so");
-  if (NULL == handle || SH_XDL_CRASH == handle) return -1;
-
-  int r = -1;
-  if (__predict_false(0 != sh_safe_init_func(handle, "pthread_getspecific", SH_SAFE_IDX_PTHREAD_GETSPECIFIC)))
-    goto end;
-  if (__predict_false(0 != sh_safe_init_func(handle, "pthread_setspecific", SH_SAFE_IDX_PTHREAD_SETSPECIFIC)))
-    goto end;
-  if (__predict_false(0 != sh_safe_init_func(handle, "pthread_mutex_lock", SH_SAFE_IDX_PTHREAD_MUTEX_LOCK)))
-    goto end;
-  if (__predict_false(0 !=
-                      sh_safe_init_func(handle, "pthread_mutex_unlock", SH_SAFE_IDX_PTHREAD_MUTEX_UNLOCK)))
-    goto end;
-  if (__predict_false(0 != sh_safe_init_func(handle, "abort", SH_SAFE_IDX_ABORT))) goto end;
-  r = 0;
-
-end:
-  xdl_close(handle);
-  return r;
+void sh_safe_init(void) {
+  sh_safe_init_func(SH_SAFE_IDX_PTHREAD_GETSPECIFIC, (void *)pthread_getspecific);
+  sh_safe_init_func(SH_SAFE_IDX_PTHREAD_SETSPECIFIC, (void *)pthread_setspecific);
+  sh_safe_init_func(SH_SAFE_IDX_PTHREAD_MUTEX_LOCK, (void *)pthread_mutex_lock);
+  sh_safe_init_func(SH_SAFE_IDX_PTHREAD_MUTEX_UNLOCK, (void *)pthread_mutex_unlock);
+  sh_safe_init_func(SH_SAFE_IDX_ABORT, (void *)abort);
 }
 
 void sh_safe_set_orig_addr(uintptr_t target_addr, uintptr_t orig_addr) {
@@ -108,7 +79,7 @@ __attribute__((always_inline)) void *sh_safe_pthread_getspecific(pthread_key_t k
 }
 
 __attribute__((always_inline)) int sh_safe_pthread_setspecific(pthread_key_t key, const void *value) {
-  if (sh_safe_api_level >= __ANDROID_API_M__) {
+  if (sh_util_get_api_level() >= __ANDROID_API_M__) {
     uintptr_t addr = sh_safe_get_orig_addr(SH_SAFE_IDX_PTHREAD_SETSPECIFIC);
     return ((int (*)(pthread_key_t, const void *))addr)(key, value);
   } else {
@@ -139,9 +110,10 @@ __attribute__((always_inline)) int sh_safe_pthread_mutex_unlock(pthread_mutex_t 
   return ((int (*)(pthread_mutex_t *))addr)(mutex);
 }
 
-__attribute__((always_inline)) void sh_safe_abort(void) {
+__attribute__((always_inline, noreturn)) void sh_safe_abort(void) {
   uintptr_t addr = sh_safe_get_orig_addr(SH_SAFE_IDX_ABORT);
   ((void (*)(void))addr)();
+  __builtin_unreachable();
 }
 
 __attribute__((always_inline)) void *sh_safe_mmap(void *addr, size_t length, int prot, int flags, int fd,

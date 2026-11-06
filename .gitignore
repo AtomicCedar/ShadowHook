@@ -9,3 +9,4 @@ build/
 *.so
 wrap.sh
 local.properties
+/gradle/gradle-daemon-jvm.properties

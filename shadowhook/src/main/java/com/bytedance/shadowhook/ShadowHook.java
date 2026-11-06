@@ -239,6 +239,8 @@ public final class ShadowHook {
             }
             loaded = true;
             return true;
+        } catch (UnsatisfiedLinkError e) {
+            throw e;
         } catch (Throwable ignored) {
             return false;
         }

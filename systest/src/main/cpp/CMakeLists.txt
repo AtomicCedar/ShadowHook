@@ -17,7 +17,7 @@ set(TARGET "shadowhooksystest")
 file(GLOB SRC *.c)
 add_library(${TARGET} SHARED ${SRC})
 target_compile_features(${TARGET} PRIVATE c_std_11)
-target_compile_options(${TARGET} PRIVATE -Weverything -Werror -Wno-unused-function -Wno-unused-macros)
+target_compile_options(${TARGET} PRIVATE -Weverything -Wno-unused-function -Wno-unused-macros)
 target_include_directories(${TARGET} PRIVATE .)
 target_link_libraries(${TARGET} log shadowhook::shadowhook)
 

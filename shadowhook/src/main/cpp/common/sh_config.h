@@ -29,8 +29,9 @@
 // Do NOT modify the following configuration unless you know exactly what you are doing.
 /////////////////////////////////////////////////////////////////////////////////////////
 
-#if defined(__arm__) && __ANDROID_API__ < 21 /* __ANDROID_API_L__ */
-#define SH_CONFIG_COMPATIBLE_WITH_ARM_ANDROID_4_X
+#if __ANDROID_API__ < 21 /* __ANDROID_API_L__ */
+// #define SH_CONFIG_COMPATIBLE_WITH_ARM_ANDROID_4_X
+#warning "Not compatible with Android 4.x"
 #endif
 
 // Global debugging. Note that in some cases these logs themselves can cause a crash.

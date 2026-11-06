@@ -28,10 +28,12 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/auxv.h>
 
 #include "bytesig.h"
 #include "sh_enter.h"
 #include "sh_errno.h"
+#include "sh_gnu_hash_neon.h"
 #include "sh_hub.h"
 #include "sh_island.h"
 #include "sh_linker.h"
@@ -52,8 +54,18 @@
   } while (0)
 
 static bool shadowhook_disable = false;
+static bool shadowhook_has_neon = false;
 static int shadowhook_init_errno = SHADOWHOOK_ERRNO_UNINIT;
 static shadowhook_mode_t shadowhook_default_mode = SHADOWHOOK_MODE_SHARED;
+
+__attribute__((always_inline)) static bool shadowhook_check_neon(void) {
+#ifdef __aarch64__
+  return true;
+#else
+  unsigned long hwcap = getauxval(AT_HWCAP);
+  return (hwcap & HWCAP_NEON) != 0;
+#endif
+}
 
 const char *shadowhook_get_version(void) {
   return "shadowhook version " SHADOWHOOK_VERSION;
@@ -83,12 +95,12 @@ int shadowhook_init(shadowhook_mode_t default_mode, bool debuggable) {
       sh_util_init();
       if (__predict_false(0 != bytesig_init(SIGSEGV))) GOTO_END(SHADOWHOOK_ERRNO_INIT_SIGSEGV);
       if (__predict_false(0 != bytesig_init(SIGBUS))) GOTO_END(SHADOWHOOK_ERRNO_INIT_SIGBUS);
-      if (__predict_false(0 != sh_safe_init())) GOTO_END(SHADOWHOOK_ERRNO_INIT_SAFE);
+      sh_safe_init();
       sh_island_init();
       sh_enter_init();
       sh_switch_init();
-      if (__predict_false(0 != sh_linker_init())) GOTO_END(SHADOWHOOK_ERRNO_INIT_LINKER);
-      if (__predict_false(0 != sh_task_init())) GOTO_END(SHADOWHOOK_ERRNO_INIT_TASK);
+
+      shadowhook_has_neon = shadowhook_check_neon();
 
 #undef GOTO_END
 
@@ -285,7 +297,7 @@ static void *shadowhook_hook_sym_name_impl(const char *lib_name, const char *sym
 
   // do hook
   r = sh_task_do(task);
-  if (0 != r && SHADOWHOOK_ERRNO_PENDING != r) {
+  if (0 != r) {
     sh_task_destroy(task);
     goto err;
   }
@@ -460,7 +472,7 @@ static void *shadowhook_intercept_sym_name_impl(const char *lib_name, const char
 
   // do hook
   r = sh_task_do(task);
-  if (0 != r && SHADOWHOOK_ERRNO_PENDING != r) {
+  if (0 != r) {
     sh_task_destroy(task);
     goto err;
   }
@@ -547,10 +559,38 @@ void *shadowhook_dlsym(void *handle, const char *sym_name) {
   return addr;
 }
 
+void *shadowhook_dlsym_prefix(void *handle, const char *sym_prefix) {
+  void *addr = sh_xdl_sym_prefix(handle, sym_prefix, NULL);
+  if (SH_XDL_CRASH == addr) {
+    SH_LOG_WARN("shadowhook: dlsym_prefix crashed - %p, %s", handle, sym_prefix);
+    addr = NULL;
+  }
+  return addr;
+}
+
+void *shadowhook_dlsym_hash(void *handle, const char *sym_name, uint32_t sysv_hash, uint32_t gnu_hash) {
+  void *addr = sh_xdl_sym_hash(handle, sym_name, sysv_hash, gnu_hash, NULL);
+  if (SH_XDL_CRASH == addr) {
+    SH_LOG_WARN("shadowhook: dlsym_hash crashed - %p, %s", handle, sym_name);
+    addr = NULL;
+  }
+  return addr;
+}
+
 void *shadowhook_dlsym_dynsym(void *handle, const char *sym_name) {
   void *addr = sh_xdl_sym_dynsym(handle, sym_name, NULL);
   if (SH_XDL_CRASH == addr) {
     SH_LOG_WARN("shadowhook: dlsym_dynsym crashed - %p, %s", handle, sym_name);
+    addr = NULL;
+  }
+  return addr;
+}
+
+void *shadowhook_dlsym_dynsym_hash(void *handle, const char *sym_name, uint32_t sysv_hash,
+                                   uint32_t gnu_hash) {
+  void *addr = sh_xdl_sym_dynsym_hash(handle, sym_name, sysv_hash, gnu_hash, NULL);
+  if (SH_XDL_CRASH == addr) {
+    SH_LOG_WARN("shadowhook: dlsym_dynsym_hash crashed - %p, %s", handle, sym_name);
     addr = NULL;
   }
   return addr;
@@ -565,43 +605,28 @@ void *shadowhook_dlsym_symtab(void *handle, const char *sym_name) {
   return addr;
 }
 
-static int shadowhook_check_callback(shadowhook_dl_info_t pre, shadowhook_dl_info_t post) {
-  int r;
-  if (__predict_false(NULL == pre && NULL == post)) return SHADOWHOOK_ERRNO_INVALID_ARG;
-#ifdef SH_CONFIG_COMPATIBLE_WITH_ARM_ANDROID_4_X
-  if (__predict_false(sh_util_get_api_level() < __ANDROID_API_L__)) return SHADOWHOOK_ERRNO_NOT_SUPPORT;
-#endif
-  if (__predict_false(0 != (r = shadowhook_check_avail()))) return r;
-
-  return 0;
+uint32_t shadowhook_hash_sysv(const char *sym_name) {
+  const uint8_t *name_bytes = (const uint8_t *)sym_name;
+  uint32_t h = 0;
+  for (uint32_t g = 0; *name_bytes;) {
+    h = (h << 4) + (uint8_t)(*name_bytes++);
+    g = h & 0xf0000000;
+    h ^= g;
+    h ^= g >> 24;
+  }
+  return h;
 }
 
-int shadowhook_register_dl_init_callback(shadowhook_dl_info_t pre, shadowhook_dl_info_t post, void *data) {
-  int r;
-  if (__predict_false(0 != (r = shadowhook_check_callback(pre, post)))) SH_ERRNO_SET_RET_FAIL(r);
-  if (0 != (r = sh_linker_register_dl_init_callback(pre, post, data))) SH_ERRNO_SET_RET_FAIL(r);
-  SH_ERRNO_SET_RET_ERRNUM(SHADOWHOOK_ERRNO_OK);
-}
-
-int shadowhook_unregister_dl_init_callback(shadowhook_dl_info_t pre, shadowhook_dl_info_t post, void *data) {
-  int r;
-  if (__predict_false(0 != (r = shadowhook_check_callback(pre, post)))) SH_ERRNO_SET_RET_FAIL(r);
-  if (0 != (r = sh_linker_unregister_dl_init_callback(pre, post, data))) SH_ERRNO_SET_RET_FAIL(r);
-  SH_ERRNO_SET_RET_ERRNUM(SHADOWHOOK_ERRNO_OK);
-}
-
-int shadowhook_register_dl_fini_callback(shadowhook_dl_info_t pre, shadowhook_dl_info_t post, void *data) {
-  int r;
-  if (__predict_false(0 != (r = shadowhook_check_callback(pre, post)))) SH_ERRNO_SET_RET_FAIL(r);
-  if (0 != (r = sh_linker_register_dl_fini_callback(pre, post, data))) SH_ERRNO_SET_RET_FAIL(r);
-  SH_ERRNO_SET_RET_ERRNUM(SHADOWHOOK_ERRNO_OK);
-}
-
-int shadowhook_unregister_dl_fini_callback(shadowhook_dl_info_t pre, shadowhook_dl_info_t post, void *data) {
-  int r;
-  if (__predict_false(0 != (r = shadowhook_check_callback(pre, post)))) SH_ERRNO_SET_RET_FAIL(r);
-  if (0 != (r = sh_linker_unregister_dl_fini_callback(pre, post, data))) SH_ERRNO_SET_RET_FAIL(r);
-  SH_ERRNO_SET_RET_ERRNUM(SHADOWHOOK_ERRNO_OK);
+uint32_t shadowhook_hash_gnu(const char *sym_name) {
+  if (__predict_true(shadowhook_has_neon)) {
+    return sh_calculate_gnu_hash_neon(sym_name);
+  }
+  const uint8_t *name_bytes = (const uint8_t *)sym_name;
+  uint32_t h = 5381;
+  while (*name_bytes) {
+    h += (h << 5) + (uint8_t)(*name_bytes++);
+  }
+  return h;
 }
 
 void *shadowhook_get_prev_func(void *func) {

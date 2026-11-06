@@ -29,8 +29,6 @@
 
 typedef struct sh_task sh_task_t;
 
-int sh_task_init(void);
-
 sh_task_t *sh_task_create_hook_by_target_addr(uintptr_t target_addr, uintptr_t new_addr, uintptr_t *orig_addr,
                                               uint32_t flags, bool is_sym_addr, bool is_proc_start,
                                               uintptr_t caller_addr, char *record_lib_name,

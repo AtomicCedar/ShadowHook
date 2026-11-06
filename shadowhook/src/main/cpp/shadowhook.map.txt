@@ -41,13 +41,14 @@
         shadowhook_dlopen;
         shadowhook_dlclose;
         shadowhook_dlsym;
+        shadowhook_dlsym_prefix;
+        shadowhook_dlsym_hash;
         shadowhook_dlsym_dynsym;
+        shadowhook_dlsym_dynsym_hash;
         shadowhook_dlsym_symtab;
 
-        shadowhook_register_dl_init_callback;
-        shadowhook_unregister_dl_init_callback;
-        shadowhook_register_dl_fini_callback;
-        shadowhook_unregister_dl_fini_callback;
+        shadowhook_hash_sysv;
+        shadowhook_hash_gnu;
 
         shadowhook_get_prev_func;
         shadowhook_pop_stack;
@@ -60,11 +61,6 @@
            these exported symbols will appear in .dynsym, which makes it
            easier for the unwinder to obtain the symbol names. */
         shadowhook_interceptor_glue;
-        shadowhook_interceptor_glue_vfpv3d16;
-        shadowhook_interceptor_glue_vfpv3d32;
-        shadowhook_interceptor_caller;
-        shadowhook_proxy_android_linker_soinfo_call_constructors;
-        shadowhook_proxy_android_linker_soinfo_call_destructors;
 
     local:
         *;

@@ -37,8 +37,8 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "linux_syscall_support_android_ext.h"
 #include "sh_log.h"
+#include "sh_lss.h"
 #include "sh_sig.h"
 #include "shadowhook.h"
 
@@ -86,26 +86,7 @@ bool sh_util_ends_with(const char *str, const char *ending) {
   return 0 == strcmp(str + (str_len - ending_len), ending);
 }
 
-static int sh_util_get_api_level_from_build_prop(void) {
-  char buf[128];
-  int api_level = -1;
-
-  FILE *fp = fopen("/system/build.prop", "r");
-  if (__predict_false(NULL == fp)) goto end;
-
-  while (fgets(buf, sizeof(buf), fp)) {
-    if (__predict_false(sh_util_starts_with(buf, "ro.build.version.sdk="))) {
-      api_level = atoi(buf + 21);
-      break;
-    }
-  }
-  fclose(fp);
-
-end:
-  return (api_level > 0) ? api_level : -1;
-}
-
-int sh_util_get_api_level(void) {
+__attribute__((const)) int __sh_util_get_api_level(void) {
   static int api_level = -1;
   static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -115,8 +96,6 @@ int sh_util_get_api_level(void) {
     val = __atomic_load_n(&api_level, __ATOMIC_RELAXED);
     if (val < 0) {
       val = android_get_device_api_level();
-      if (val < 0) val = sh_util_get_api_level_from_build_prop();
-      if (val < __ANDROID_API_J__) val = __ANDROID_API_J__;
       __atomic_store_n(&api_level, val, __ATOMIC_RELEASE);
     }
     pthread_mutex_unlock(&lock);
@@ -178,6 +157,9 @@ size_t sh_util_get_arm_cpu_features(void) {
 #endif
 
 void sh_util_init(void) {
+  // ensure API level is initialized
+  __sh_util_get_api_level();
+
   // init system uptime
   struct sysinfo info;
   sys_sysinfo(&info);

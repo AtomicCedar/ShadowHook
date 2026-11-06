@@ -84,7 +84,7 @@ const char *sh_errno_to_errmsg(int error_number) {
                               /* 17 */ "Open ELF crashed",
                               /* 18 */ "Find symbol in ELF failed",
                               /* 19 */ "Find symbol in ELF crashed",
-                              /* 20 */ "Duplicate unique ook",
+                              /* 20 */ "Duplicate unique hook",
                               /* 21 */ "Dladdr crashed",
                               /* 22 */ "Find dlinfo failed",
                               /* 23 */ "Symbol size too small",
@@ -111,9 +111,13 @@ const char *sh_errno_to_errmsg(int error_number) {
                               /* 44 */ "Duplicate multi hook",
                               /* 45 */ "Disabled"};
 
-  if (__predict_false(error_number < 0 || error_number >= (int)(sizeof(msg) / sizeof(msg[0])))) {
-    return "Unknown error number";
+  if (__predict_true(error_number >= 0 && error_number < (int)(sizeof(msg) / sizeof(msg[0])))) {
+    return msg[error_number];
   }
-
-  return msg[error_number];
+  switch (error_number) {
+    case SHADOWHOOK_ERRNO_HOOK_DLOPEN:
+      return "Open ELF failed";
+    default:
+      return "Unknown error number";
+  }
 }

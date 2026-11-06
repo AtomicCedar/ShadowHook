@@ -32,6 +32,7 @@
 #include "sh_util.h"
 #include "shadowhook.h"
 #include "xdl.h"
+#include "xdl_ext.h"
 
 typedef struct {
   const char *lib_name;
@@ -160,6 +161,43 @@ void *sh_xdl_sym(void *handle, const char *sym_name, size_t *symbol_size) {
   return addr;
 }
 
+void *sh_xdl_sym_prefix(void *handle, const char *sym_prefix, size_t *symbol_size) {
+  void *addr = NULL;
+  if (SHADOWHOOK_ERRNO_OK != shadowhook_get_init_errno()) {
+    addr = xdl_sym_prefix(handle, sym_prefix, symbol_size);
+    if (NULL == addr) addr = xdl_dsym_prefix(handle, sym_prefix, symbol_size);
+  } else {
+    SH_SIG_TRY(SIGSEGV, SIGBUS) {
+      addr = xdl_sym_prefix(handle, sym_prefix, symbol_size);
+      if (NULL == addr) addr = xdl_dsym_prefix(handle, sym_prefix, symbol_size);
+    }
+    SH_SIG_CATCH() {
+      addr = SH_XDL_CRASH;
+    }
+    SH_SIG_EXIT
+  }
+  return addr;
+}
+
+void *sh_xdl_sym_hash(void *handle, const char *sym_name, uint32_t sysv_hash, uint32_t gnu_hash,
+                      size_t *symbol_size) {
+  void *addr = NULL;
+  if (SHADOWHOOK_ERRNO_OK != shadowhook_get_init_errno()) {
+    addr = xdl_sym_hash(handle, sym_name, sysv_hash, gnu_hash, symbol_size);
+    if (NULL == addr) addr = xdl_dsym(handle, sym_name, symbol_size);
+  } else {
+    SH_SIG_TRY(SIGSEGV, SIGBUS) {
+      addr = xdl_sym_hash(handle, sym_name, sysv_hash, gnu_hash, symbol_size);
+      if (NULL == addr) addr = xdl_dsym(handle, sym_name, symbol_size);
+    }
+    SH_SIG_CATCH() {
+      addr = SH_XDL_CRASH;
+    }
+    SH_SIG_EXIT
+  }
+  return addr;
+}
+
 void *sh_xdl_sym_dynsym(void *handle, const char *sym_name, size_t *symbol_size) {
   void *addr = NULL;
   if (SHADOWHOOK_ERRNO_OK != shadowhook_get_init_errno()) {
@@ -167,6 +205,23 @@ void *sh_xdl_sym_dynsym(void *handle, const char *sym_name, size_t *symbol_size)
   } else {
     SH_SIG_TRY(SIGSEGV, SIGBUS) {
       addr = xdl_sym(handle, sym_name, symbol_size);
+    }
+    SH_SIG_CATCH() {
+      addr = SH_XDL_CRASH;
+    }
+    SH_SIG_EXIT
+  }
+  return addr;
+}
+
+void *sh_xdl_sym_dynsym_hash(void *handle, const char *sym_name, uint32_t sysv_hash, uint32_t gnu_hash,
+                             size_t *symbol_size) {
+  void *addr = NULL;
+  if (SHADOWHOOK_ERRNO_OK != shadowhook_get_init_errno()) {
+    addr = xdl_sym_hash(handle, sym_name, sysv_hash, gnu_hash, symbol_size);
+  } else {
+    SH_SIG_TRY(SIGSEGV, SIGBUS) {
+      addr = xdl_sym_hash(handle, sym_name, sysv_hash, gnu_hash, symbol_size);
     }
     SH_SIG_CATCH() {
       addr = SH_XDL_CRASH;

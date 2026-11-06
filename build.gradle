@@ -1,6 +1,6 @@
 plugins {
-    id 'com.android.application' version '9.2.1' apply false
-    id 'com.android.library' version '9.2.1' apply false
+    id 'com.android.application' version '9.4.1' apply false
+    id 'com.android.library' version '9.4.1' apply false
 }
 
 tasks.register('clean', Delete) {
@@ -8,12 +8,12 @@ tasks.register('clean', Delete) {
 }
 
 ext {
-    minSdkVersion = 16
+    minSdkVersion = 21
     compileSdkVersion = 37
     targetSdkVersion = 37
     buildToolsVersion = '37.0.0'
-    javaVersion = JavaVersion.VERSION_1_8
-    ndkVersion = "23.2.8568313"
+    javaVersion = JavaVersion.VERSION_11
+    ndkVersion = "30.0.16248370"
     cmakeVersion = "4.1.2"
     abiFilters = "armeabi-v7a,arm64-v8a"
     useASAN = false

@@ -30,5 +30,10 @@
 
 void *sh_xdl_open(const char *lib_name);
 void *sh_xdl_sym(void *handle, const char *sym_name, size_t *symbol_size);
+void *sh_xdl_sym_prefix(void *handle, const char *sym_prefix, size_t *symbol_size);
+void *sh_xdl_sym_hash(void *handle, const char *sym_name, uint32_t sysv_hash, uint32_t gnu_hash,
+                      size_t *symbol_size);
 void *sh_xdl_sym_dynsym(void *handle, const char *sym_name, size_t *symbol_size);
+void *sh_xdl_sym_dynsym_hash(void *handle, const char *sym_name, uint32_t sysv_hash, uint32_t gnu_hash,
+                             size_t *symbol_size);
 void *sh_xdl_sym_symtab(void *handle, const char *sym_name, size_t *symbol_size);

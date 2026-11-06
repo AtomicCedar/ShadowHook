@@ -38,7 +38,7 @@
 #define SHADOWHOOK_VERSION "2.0.1"
 
 #define SHADOWHOOK_ERRNO_OK                     0
-#define SHADOWHOOK_ERRNO_PENDING                1
+#define SHADOWHOOK_ERRNO_PENDING                1  // removed
 #define SHADOWHOOK_ERRNO_UNINIT                 2
 #define SHADOWHOOK_ERRNO_INVALID_ARG            3
 #define SHADOWHOOK_ERRNO_OOM                    4
@@ -48,12 +48,13 @@
 #define SHADOWHOOK_ERRNO_INIT_SIGSEGV           8
 #define SHADOWHOOK_ERRNO_INIT_SIGBUS            9
 #define SHADOWHOOK_ERRNO_INTERCEPT_DUP          10
-#define SHADOWHOOK_ERRNO_INIT_SAFE              11
-#define SHADOWHOOK_ERRNO_INIT_LINKER            12
+#define SHADOWHOOK_ERRNO_INIT_SAFE              11  // removed
+#define SHADOWHOOK_ERRNO_INIT_LINKER            12  // removed
 #define SHADOWHOOK_ERRNO_INIT_HUB               13
 #define SHADOWHOOK_ERRNO_HUB_CREAT              14
-#define SHADOWHOOK_ERRNO_MONITOR_DLOPEN         15
+#define SHADOWHOOK_ERRNO_MONITOR_DLOPEN         15  // removed
 #define SHADOWHOOK_ERRNO_HOOK_UNIQUE_DUP        16
+#define SHADOWHOOK_ERRNO_HOOK_DLOPEN            10001  // added
 #define SHADOWHOOK_ERRNO_HOOK_DLOPEN_CRASH      17
 #define SHADOWHOOK_ERRNO_HOOK_DLSYM             18
 #define SHADOWHOOK_ERRNO_HOOK_DLSYM_CRASH       19
@@ -72,11 +73,11 @@
 #define SHADOWHOOK_ERRNO_UNHOOK_ON_ERROR        32
 #define SHADOWHOOK_ERRNO_UNHOOK_ON_UNFINISHED   33
 #define SHADOWHOOK_ERRNO_ELF_ARCH_MISMATCH      34
-#define SHADOWHOOK_ERRNO_LINKER_ARCH_MISMATCH   35
-#define SHADOWHOOK_ERRNO_DUP                    36
-#define SHADOWHOOK_ERRNO_NOT_FOUND              37
-#define SHADOWHOOK_ERRNO_NOT_SUPPORT            38
-#define SHADOWHOOK_ERRNO_INIT_TASK              39
+#define SHADOWHOOK_ERRNO_LINKER_ARCH_MISMATCH   35  // removed
+#define SHADOWHOOK_ERRNO_DUP                    36  // removed
+#define SHADOWHOOK_ERRNO_NOT_FOUND              37  // removed
+#define SHADOWHOOK_ERRNO_NOT_SUPPORT            38  // removed
+#define SHADOWHOOK_ERRNO_INIT_TASK              39  // removed
 #define SHADOWHOOK_ERRNO_HOOK_ISLAND_EXIT       40
 #define SHADOWHOOK_ERRNO_HOOK_ISLAND_ENTER      41
 #define SHADOWHOOK_ERRNO_HOOK_ISLAND_REWRITE    42
@@ -218,15 +219,14 @@ void shadowhook_dump_records(int fd, uint32_t item_flags);
 void *shadowhook_dlopen(const char *lib_name);
 void shadowhook_dlclose(void *handle);
 void *shadowhook_dlsym(void *handle, const char *sym_name);
+void *shadowhook_dlsym_prefix(void *handle, const char *sym_prefix);
+void *shadowhook_dlsym_hash(void *handle, const char *sym_name, uint32_t sysv_hash, uint32_t gnu_hash);
 void *shadowhook_dlsym_dynsym(void *handle, const char *sym_name);
+void *shadowhook_dlsym_dynsym_hash(void *handle, const char *sym_name, uint32_t sysv_hash, uint32_t gnu_hash);
 void *shadowhook_dlsym_symtab(void *handle, const char *sym_name);
 
-// register and unregister callbacks for executing dynamic library's .init .init_array / .fini .fini_array
-typedef void (*shadowhook_dl_info_t)(struct dl_phdr_info *info, size_t size, void *data);
-int shadowhook_register_dl_init_callback(shadowhook_dl_info_t pre, shadowhook_dl_info_t post, void *data);
-int shadowhook_unregister_dl_init_callback(shadowhook_dl_info_t pre, shadowhook_dl_info_t post, void *data);
-int shadowhook_register_dl_fini_callback(shadowhook_dl_info_t pre, shadowhook_dl_info_t post, void *data);
-int shadowhook_unregister_dl_fini_callback(shadowhook_dl_info_t pre, shadowhook_dl_info_t post, void *data);
+uint32_t shadowhook_hash_sysv(const char *sym_name);
+uint32_t shadowhook_hash_gnu(const char *sym_name);
 
 // for internal use
 void *shadowhook_get_prev_func(void *func);
@@ -274,5 +274,56 @@ class ShadowhookStackScope {
 
 // get return address in proxy-function
 #define SHADOWHOOK_RETURN_ADDRESS() shadowhook_get_return_address()
+
+#ifdef __cplusplus
+class ShadowhookSymbol {
+ public:
+  constexpr ShadowhookSymbol(const char *sym_name) : sym_name_(sym_name) {
+    if consteval {
+      sysv_hash_ = CalculateSysvHash(sym_name_);
+      gnu_hash_ = CalculateGnuHash(sym_name_);
+    } else {
+      sysv_hash_ = shadowhook_hash_sysv(sym_name);
+      gnu_hash_ = shadowhook_hash_gnu(sym_name);
+    }
+  }
+
+  constexpr const char *name() const noexcept { return sym_name_; }
+  constexpr uint32_t sysv_hash() const noexcept { return sysv_hash_; }
+  constexpr uint32_t gnu_hash() const noexcept { return gnu_hash_; }
+
+ private:
+  static consteval uint32_t CalculateSysvHash(const char* str) {
+    uint32_t h = 0;
+    for (uint32_t g = 0; *str;) {
+      h = (h << 4) + static_cast<uint8_t>(*str++);
+      g = h & 0xf0000000;
+      h ^= g;
+      h ^= g >> 24;
+    }
+    return h;
+  }
+
+  static consteval uint32_t CalculateGnuHash(const char* str) {
+    uint32_t h = 5381;
+    while (*str) {
+      h += (h << 5) + static_cast<uint8_t>(*str++);
+    }
+    return h;
+  }
+
+  const char *sym_name_;
+  uint32_t sysv_hash_;
+  uint32_t gnu_hash_;
+};
+
+inline void *shadowhook_dlsym_hash(void *handle, const ShadowhookSymbol &symbol) {
+  return shadowhook_dlsym_hash(handle, symbol.name(), symbol.sysv_hash(), symbol.gnu_hash());
+}
+
+inline void *shadowhook_dlsym_dynsym_hash(void *handle, const ShadowhookSymbol &symbol) {
+  return shadowhook_dlsym_dynsym_hash(handle, symbol.name(), symbol.sysv_hash(), symbol.gnu_hash());
+}
+#endif
 
 #endif

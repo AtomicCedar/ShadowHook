@@ -1,0 +1,9 @@
+[submodule "shadowhook/src/main/cpp/third_party/xdl"]
+	path = shadowhook/src/main/cpp/third_party/xdl
+	url = https://github.com/hexhacking/xDL
+[submodule "shadowhook/src/main/cpp/third_party/xz-embedded"]
+	path = shadowhook/src/main/cpp/third_party/xz-embedded
+	url = https://github.com/tukaani-project/xz-embedded
+[submodule "shadowhook/src/main/cpp/third_party/lss"]
+	path = shadowhook/src/main/cpp/third_party/lss
+	url = https://chromium.googlesource.com/linux-syscall-support

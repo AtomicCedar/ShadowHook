@@ -30,20 +30,6 @@
 #include "sh_util.h"
 #include "shadowhook.h"
 
-int sh_linker_init(void);
-
-// for Android 4.x
-#ifdef SH_CONFIG_COMPATIBLE_WITH_ARM_ANDROID_4_X
-typedef void (*sh_linker_dlopen_post_t)(void);
-int sh_linker_register_dlopen_post_callback(sh_linker_dlopen_post_t post);
-#endif
-
-// for Android >= 5.0
-int sh_linker_register_dl_init_callback(shadowhook_dl_info_t pre, shadowhook_dl_info_t post, void *data);
-int sh_linker_unregister_dl_init_callback(shadowhook_dl_info_t pre, shadowhook_dl_info_t post, void *data);
-int sh_linker_register_dl_fini_callback(shadowhook_dl_info_t pre, shadowhook_dl_info_t post, void *data);
-int sh_linker_unregister_dl_fini_callback(shadowhook_dl_info_t pre, shadowhook_dl_info_t post, void *data);
-
 // linker utils
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wpadded"
@@ -61,15 +47,9 @@ typedef struct {
 int sh_linker_get_addr_info_by_addr(sh_addr_info_t *addr_info, void *addr, bool is_sym_addr,
                                     bool is_proc_start, bool ignore_sym_info);
 int sh_linker_get_addr_info_by_name(sh_addr_info_t *addr_info, const char *lib_name, const char *sym_name);
-int sh_linker_get_addr_info_by_handle(sh_addr_info_t *addr_info, void **cached_handle,
-                                      struct dl_phdr_info *info, const char *sym_name);
-void sh_linker_close_handle(void *cached_handle);
 
 void sh_linker_free_addr_info(sh_addr_info_t *addr_info);
 int sh_linker_copy_addr_info(sh_addr_info_t *addr_info, sh_addr_info_t *copy);
 
 bool sh_linker_is_addr_in_elf_pt_load(uintptr_t addr, void *dli_fbase, const ElfW(Phdr) *dlpi_phdr,
                                       size_t dlpi_phnum);
-
-void shadowhook_proxy_android_linker_soinfo_call_constructors(void *soinfo);
-void shadowhook_proxy_android_linker_soinfo_call_destructors(void *soinfo);
