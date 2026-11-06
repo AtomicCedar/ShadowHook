@@ -42,3 +42,11 @@ ext {
     POM_DEVELOPER_ID = "bytedance"
     POM_DEVELOPER_NAME = "bytedance"
 }
+
+// allow CI to override via -P flags
+if (rootProject.hasProperty('abiFilters')) {
+    ext.abiFilters = project.property('abiFilters')
+}
+if (rootProject.hasProperty('useASAN')) {
+    ext.useASAN = project.property('useASAN').toBoolean()
+}
