@@ -22,6 +22,7 @@
 // Created by Kelun Cai (caikelun@bytedance.com) on 2021-04-11.
 
 #include "sh_task.h"
+#include "sh_bound.h"
 
 #include <inttypes.h>
 #include <malloc.h>
@@ -77,6 +78,7 @@ struct sh_task {
   } typed;
   uintptr_t caller_addr;
   bool is_by_target_addr;
+  size_t sym_offset;  // in-symbol instruction offset for intercept, 0 = none
   bool is_sym_addr;
   bool is_proc_start;
   bool is_finished;
@@ -234,6 +236,17 @@ err:
   return NULL;
 }
 
+sh_task_t *sh_task_create_intercept_by_sym_offset(const char *lib_name, const char *sym_name, size_t sym_offset,
+                                                  shadowhook_interceptor_t pre, void *data, uint32_t flags,
+                                                  shadowhook_intercepted_t intercepted, void *intercepted_arg,
+                                                  uintptr_t caller_addr) {
+  sh_task_t *self =
+      sh_task_create_intercept_by_sym_name(lib_name, sym_name, pre, data, flags, intercepted, intercepted_arg,
+                                           caller_addr);
+  if (NULL != self) self->sym_offset = sym_offset;
+  return self;
+}
+
 void sh_task_destroy(sh_task_t *self) {
   SH_LOG_INFO("task: delayed destroy, target_addr %" PRIxPTR, self->target_addr);
   if (NULL != self->lib_name) free(self->lib_name);
@@ -280,8 +293,16 @@ static void sh_task_do_pending(sh_task_t *task, struct dl_phdr_info *info, void 
   // do hook or intercept
   sh_recorder_trace_t trace = SH_RECORDER_TRACE_INITIALIZER;
   if (0 == r) {
-    task->target_addr = (uintptr_t)addr_info.dli_saddr;
-    if (SH_TASK_HOOK == task->type)
+    task->target_addr = (uintptr_t)addr_info.dli_saddr + task->sym_offset;
+    if (0 != task->sym_offset) {
+      r = sh_bound_check((uintptr_t)addr_info.dli_saddr, addr_info.dli_ssize, task->sym_offset);
+      if (0 == r && SH_TASK_HOOK == task->type)
+        r = sh_switch_hook(task->target_addr, &addr_info, task->typed.hook.new_addr, task->typed.hook.orig_addr,
+                           task->typed.hook.flags, &trace);
+      else if (0 == r)
+        r = sh_switch_intercept(task->target_addr, &addr_info, task->typed.intercept.pre,
+                                task->typed.intercept.data, task->typed.intercept.flags, &trace);
+    } else if (SH_TASK_HOOK == task->type)
       r = sh_switch_hook(task->target_addr, &addr_info, task->typed.hook.new_addr, task->typed.hook.orig_addr,
                          task->typed.hook.flags, &trace);
     else
@@ -429,7 +450,10 @@ int sh_task_do(sh_task_t *self) {
   // find target-address by library-name and symbol-name
   if (!self->is_by_target_addr) {
     if (0 != (r = sh_linker_get_addr_info_by_name(&addr_info, self->lib_name, self->sym_name))) goto end;
-    self->target_addr = (uintptr_t)addr_info.dli_saddr;
+    if (0 != self->sym_offset &&
+        0 != (r = sh_bound_check((uintptr_t)addr_info.dli_saddr, addr_info.dli_ssize, self->sym_offset)))
+      goto end;
+    self->target_addr = (uintptr_t)addr_info.dli_saddr + self->sym_offset;
   } else {
     addr_info.is_sym_addr = self->is_sym_addr;
     addr_info.is_proc_start = self->is_proc_start;

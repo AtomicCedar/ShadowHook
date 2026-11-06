@@ -33,6 +33,8 @@
         shadowhook_intercept_sym_addr;
         shadowhook_intercept_sym_name;
         shadowhook_intercept_sym_name_callback;
+        shadowhook_intercept_sym_addr_offset;
+        shadowhook_intercept_sym_offset;
         shadowhook_unintercept;
 
         shadowhook_get_records;

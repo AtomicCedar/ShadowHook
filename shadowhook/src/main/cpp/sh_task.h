@@ -47,6 +47,10 @@ sh_task_t *sh_task_create_intercept_by_sym_name(const char *lib_name, const char
                                                 shadowhook_interceptor_t pre, void *data, uint32_t flags,
                                                 shadowhook_intercepted_t intercepted, void *intercepted_arg,
                                                 uintptr_t caller_addr);
+sh_task_t *sh_task_create_intercept_by_sym_offset(const char *lib_name, const char *sym_name, size_t sym_offset,
+                                                  shadowhook_interceptor_t pre, void *data, uint32_t flags,
+                                                  shadowhook_intercepted_t intercepted, void *intercepted_arg,
+                                                  uintptr_t caller_addr);
 
 void sh_task_destroy(sh_task_t *self);
 

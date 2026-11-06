@@ -123,7 +123,8 @@ const char *sh_errno_to_errmsg(int error_number) {
                               /* 42 */ "Alloc island for rewrite failed",
                               /* 43 */ "Mode conflict",
                               /* 44 */ "Duplicate multi hook",
-                              /* 45 */ "Disabled"};
+                              /* 45 */ "Disabled",
+                              /* 46 */ "Invalid instruction offset in symbol"};
 
   if (__predict_false(error_number < 0 || error_number >= (int)(sizeof(msg) / sizeof(msg[0])))) {
     return "Unknown error number";

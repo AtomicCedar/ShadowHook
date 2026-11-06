@@ -83,6 +83,7 @@
 #define SHADOWHOOK_ERRNO_MODE_CONFLICT          43
 #define SHADOWHOOK_ERRNO_HOOK_MULTI_DUP         44
 #define SHADOWHOOK_ERRNO_DISABLED               45
+#define SHADOWHOOK_ERRNO_BAD_OFFSET             46
 
 #ifdef __cplusplus
 extern "C" {
@@ -195,6 +196,18 @@ void *shadowhook_intercept_sym_name(const char *lib_name, const char *sym_name, 
 void *shadowhook_intercept_sym_name_callback(const char *lib_name, const char *sym_name,
                                              shadowhook_interceptor_t pre, void *data, uint32_t flags,
                                              shadowhook_intercepted_t intercepted, void *intercepted_arg);
+// Intercept at an arbitrary instruction position inside a symbol (function),
+// specified as symbol address + in-function offset. The offset is validated
+// against instruction boundaries (arm64: 4-byte alignment; thumb: linear
+// decode, IT-block and BL/BLX/SVC checks) before hooking. On failure returns
+// NULL, check shadowhook_get_errno() (e.g. SHADOWHOOK_ERRNO_BAD_OFFSET).
+void *shadowhook_intercept_sym_addr_offset(void *sym_addr, size_t offset, shadowhook_interceptor_t pre,
+                                           void *data, uint32_t flags);
+// Same as above, but the symbol is specified by library name + symbol name.
+// If the library or symbol is not loaded yet, the task will be pending until
+// it is loaded.
+void *shadowhook_intercept_sym_offset(const char *lib_name, const char *sym_name, size_t offset,
+                                      shadowhook_interceptor_t pre, void *data, uint32_t flags);
 int shadowhook_unintercept(void *stub);
 
 // get operation records

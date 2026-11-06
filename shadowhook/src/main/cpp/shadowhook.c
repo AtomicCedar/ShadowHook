@@ -41,6 +41,7 @@
 #include "sh_sig.h"
 #include "sh_switch.h"
 #include "sh_task.h"
+#include "sh_bound.h"
 #include "sh_util.h"
 #include "sh_xdl.h"
 #include "xdl.h"
@@ -444,6 +445,68 @@ void *shadowhook_intercept_sym_addr(void *sym_addr, shadowhook_interceptor_t pre
   }
   return shadowhook_intercept_addr_impl("intercept_sym_addr", sym_addr, pre, data, flags, true, true,
                                         (uintptr_t)caller_addr, record_lib_name, record_sym_name);
+}
+
+void *shadowhook_intercept_sym_addr_offset(void *sym_addr, size_t offset, shadowhook_interceptor_t pre,
+                                           void *data, uint32_t flags) {
+  const void *caller_addr = __builtin_return_address(0);
+  sh_errno_reset();
+
+  // validate offset against instruction boundaries before hooking
+  sh_addr_info_t addr_info;
+  memset(&addr_info, 0, sizeof(sh_addr_info_t));
+  int r;
+  if (NULL == sym_addr || NULL == pre) {
+    r = SHADOWHOOK_ERRNO_INVALID_ARG;
+  } else if (0 != (r = sh_linker_get_addr_info_by_addr(&addr_info, sym_addr, true, true, false))) {
+    // addr_info filled for logging only; fall through
+  } else if (0 != (r = sh_bound_check((uintptr_t)sym_addr, addr_info.dli_ssize, offset))) {
+    // fall through
+  } else {
+    r = 0;
+  }
+  sh_linker_free_addr_info(&addr_info);
+  if (0 != r) {
+    SH_LOG_ERROR("shadowhook: intercept_sym_addr_offset(%p, %zu) FAILED. %d - %s", sym_addr, offset, r,
+                 sh_errno_to_errmsg(r));
+    SH_ERRNO_SET_RET_NULL(r);
+  }
+
+  return shadowhook_intercept_addr_impl("intercept_sym_addr_offset", (void *)((uintptr_t)sym_addr + offset),
+                                        pre, data, flags, true, false, (uintptr_t)caller_addr, NULL, NULL);
+}
+
+void *shadowhook_intercept_sym_offset(const char *lib_name, const char *sym_name, size_t offset,
+                                      shadowhook_interceptor_t pre, void *data, uint32_t flags) {
+  const void *caller_addr = __builtin_return_address(0);
+  sh_errno_reset();
+
+  int r;
+  if (__predict_false(NULL == lib_name || NULL == sym_name || NULL == pre))
+    GOTO_ERR(SHADOWHOOK_ERRNO_INVALID_ARG);
+  if (__predict_false(0 != (r = shadowhook_check_avail()))) goto err;
+
+  // create task (offset validated lazily when the symbol is resolved)
+  sh_task_t *task = sh_task_create_intercept_by_sym_offset(lib_name, sym_name, offset, pre, data, flags, NULL,
+                                                           NULL, (uintptr_t)caller_addr);
+  if (NULL == task) GOTO_ERR(SHADOWHOOK_ERRNO_OOM);
+
+  // do intercept
+  r = sh_task_do(task);
+  if (0 != r && SHADOWHOOK_ERRNO_PENDING != r) {
+    sh_task_destroy(task);
+    goto err;
+  }
+
+  // OK
+  SH_LOG_INFO("shadowhook: intercept_sym_offset(%s, %s + %zu) OK. return: %p", lib_name, sym_name, offset,
+              (void *)task);
+  SH_ERRNO_SET_RET(SHADOWHOOK_ERRNO_OK, (void *)task);
+
+err:
+  SH_LOG_ERROR("shadowhook: intercept_sym_offset(%s, %s + %zu) FAILED. %d - %s", lib_name, sym_name, offset, r,
+               sh_errno_to_errmsg(r));
+  SH_ERRNO_SET_RET_NULL(r);
 }
 
 static void *shadowhook_intercept_sym_name_impl(const char *lib_name, const char *sym_name,
