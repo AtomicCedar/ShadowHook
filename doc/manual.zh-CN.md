@@ -1950,8 +1950,8 @@ void shadowhook_dump_records(int fd, uint32_t item_flags);
 
 ## intercept 问题
 
-- **对于指令序列中夹杂的“数据部分”，无法对它们进行拦截。** 这个应该是符合预期的。shadowhook 没有额外的逻辑去判断当前要执行 intercept 的目标地址上是“指令”还是“数据”，而是一律都认为是“指令”。请在调用 API 时不要传入“指向数据的地址”。
+- **对于指令序列中夹杂的“数据部分”，无法对它们进行拦截。** 这个应该是符合预期的。shadowhook 没有额外的逻辑去判断当前要执行 intercept 的目标地址上是“指令”还是“数据”，而是一律都认为是“指令”。请在调用 API 时不要传入“指向数据的地址”。`shadowhook_intercept_sym_addr_offset()` / `shadowhook_intercept_sym_offset()` 这组 API 可以部分规避该问题：它们会用符号大小校验偏移，目标符号尾部的 literal pool 会被 `errno 46` 拒绝，而不是被当作指令处理。
 
-- **在 32 位环境中，对于“连续的两条 2 字节的 thumb 指令”或者“一条 2 字节 thumb 指令紧跟着一条 4 字节 thumb 指令”的情况，shadowhook 无法同时对它们执行intercept（只拦截其中任意的一条指令不会有问题）。** 原因是 shadowhook 处理 intercept 时会将“目标地址处的指令修改为一条 4 字节的相对跳转指令”。理论上，这种情况可以处理，但是需要增加很多特别的处理逻辑。考虑到 ROI 和目前 32 位 arm 占比已经大幅减少，目前没有支持。如果以后业务上确实有这种需求，我们再支持。
+- **在 32 位环境中，对于“连续的两条 2 字节的 thumb 指令”或者“一条 2 字节 thumb 指令紧跟着一条 4 字节 thumb 指令”的情况，shadowhook 无法同时对它们执行intercept（只拦截其中任意的一条指令不会有问题）。** 原因是 shadowhook 处理 intercept 时会将“目标地址处的指令修改为一条 4 字节的相对跳转指令”。理论上，这种情况可以处理，但是需要增加很多特别的处理逻辑。考虑到 ROI 和目前 32 位 arm 占比已经大幅减少，目前没有支持。如果以后业务上确实有这种需求，我们再支持。`shadowhook_intercept_sym_addr_offset()` / `shadowhook_intercept_sym_offset()` 这组 API 同样受此约束：单个偏移没有问题，但不支持同时对这样两个相邻位置做 intercept。
 
-- **在 32 位环境中，对于 Thumb `IT` 指令，无法对 `THEN` 部分的指令做拦截。** 理由同上。如果以后业务上确实有这种需求，我们再支持。
+- **在 32 位环境中，对于 Thumb `IT` 指令，无法对 `THEN` 部分的指令做拦截。** 理由同上。使用 `shadowhook_intercept_sym_addr_offset()` / `shadowhook_intercept_sym_offset()` 这组 API 时，这类位置会被显式拒绝并返回 `errno 46 - Invalid instruction offset in symbol`（`IT` 指令本身及其块首位置仍可拦截），避免难以定位的失败方式。
