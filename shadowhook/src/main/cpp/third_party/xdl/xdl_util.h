@@ -70,6 +70,9 @@ extern "C" {
 bool xdl_util_starts_with(const char *str, const char *start);
 bool xdl_util_ends_with(const char *str, const char *ending);
 
+// match pathname with at most one path component difference (ported from xDL dev 93f913a)
+bool xdl_util_match_pathname(const char *a, const char *b);
+
 size_t xdl_util_trim_ending(char *start);
 
 int xdl_util_get_api_level(void);

@@ -478,11 +478,11 @@ static int xdl_find_iterate_cb(struct dl_phdr_info *info, size_t size, void *arg
     if ('/' == info->dlpi_name[0]) {
       if (0 != strcmp(info->dlpi_name, filename)) return 0;
     } else {
-      if (!xdl_util_ends_with(filename, info->dlpi_name)) return 0;
+      if (!xdl_util_match_pathname(filename, info->dlpi_name)) return 0;
     }
   } else {
     if ('/' == info->dlpi_name[0]) {
-      if (!xdl_util_ends_with(info->dlpi_name, filename)) return 0;
+      if (!xdl_util_match_pathname(info->dlpi_name, filename)) return 0;
     } else {
       if (0 != strcmp(info->dlpi_name, filename)) return 0;
     }
@@ -508,9 +508,9 @@ static int xdl_find_iterate_cb(struct dl_phdr_info *info, size_t size, void *arg
 static xdl_t *xdl_find(const char *filename) {
   // from auxv (linker, vDSO)
   xdl_t *self = NULL;
-  if (xdl_util_ends_with(filename, XDL_UTIL_LINKER_BASENAME))
+  if (xdl_util_match_pathname(filename, XDL_UTIL_LINKER_BASENAME))
     self = xdl_find_from_auxv(AT_BASE, XDL_UTIL_LINKER_PATHNAME);
-  else if (xdl_util_ends_with(filename, XDL_UTIL_VDSO_BASENAME))
+  else if (xdl_util_match_pathname(filename, XDL_UTIL_VDSO_BASENAME))
     self = xdl_find_from_auxv(AT_SYSINFO_EHDR, XDL_UTIL_VDSO_BASENAME);
 
   // from auxv (app_process)
@@ -525,7 +525,7 @@ static xdl_t *xdl_find(const char *filename) {
     basename = XDL_UTIL_APP_PROCESS_BASENAME;
     pathname = XDL_UTIL_APP_PROCESS_PATHNAME;
   }
-  if (xdl_util_ends_with(filename, basename)) self = xdl_find_from_auxv(AT_PHDR, pathname);
+  if (xdl_util_match_pathname(filename, basename)) self = xdl_find_from_auxv(AT_PHDR, pathname);
 
   if (NULL != self) return self;
 
@@ -700,22 +700,32 @@ static void *xdl_resolve_symbol_address(xdl_t *self, ElfW(Sym) *sym, size_t *sym
       if (NULL == getauxval) return NULL;
       typedef void *(*ifunc_resolver_t)(uint64_t, xdl_ifunc_arg_t *);
       static xdl_ifunc_arg_t arg;
+      static pthread_mutex_t ifunc_lock = PTHREAD_MUTEX_INITIALIZER;
       static bool initialized = false;
       if (!__atomic_load_n(&initialized, __ATOMIC_ACQUIRE)) {
-        arg.size = sizeof(xdl_ifunc_arg_t);
-        arg.hwcap = getauxval(AT_HWCAP);
-        arg.hwcap2 = getauxval(AT_HWCAP2);
-        __atomic_store_n(&initialized, true, __ATOMIC_RELEASE);
+        pthread_mutex_lock(&ifunc_lock);
+        if (!__atomic_load_n(&initialized, __ATOMIC_RELAXED)) {
+          arg.size = sizeof(xdl_ifunc_arg_t);
+          arg.hwcap = getauxval(AT_HWCAP);
+          arg.hwcap2 = getauxval(AT_HWCAP2);
+          __atomic_store_n(&initialized, true, __ATOMIC_RELEASE);
+        }
+        pthread_mutex_unlock(&ifunc_lock);
       }
       real_sym_addr = ((ifunc_resolver_t)sym_addr)(arg.hwcap | XDL_IFUNC_ARG_HWCAP, &arg);
 #elif defined(__arm__)
       if (NULL == getauxval) return NULL;
       typedef void *(*ifunc_resolver_t)(unsigned long);
       static unsigned long hwcap;
+      static pthread_mutex_t ifunc_lock = PTHREAD_MUTEX_INITIALIZER;
       static bool initialized = false;
       if (!__atomic_load_n(&initialized, __ATOMIC_ACQUIRE)) {
-        hwcap = getauxval(AT_HWCAP);
-        __atomic_store_n(&initialized, true, __ATOMIC_RELEASE);
+        pthread_mutex_lock(&ifunc_lock);
+        if (!__atomic_load_n(&initialized, __ATOMIC_RELAXED)) {
+          hwcap = getauxval(AT_HWCAP);
+          __atomic_store_n(&initialized, true, __ATOMIC_RELEASE);
+        }
+        pthread_mutex_unlock(&ifunc_lock);
       }
       real_sym_addr = ((ifunc_resolver_t)sym_addr)(hwcap);
 #else
