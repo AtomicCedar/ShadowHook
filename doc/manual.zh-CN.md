@@ -194,6 +194,7 @@ public class MySdk {
             .setDebuggable(false)
             .setRecordable(false)
             .setDisable(false)
+            .setNothingFd(-1)
             .build());
     }
 }
@@ -210,12 +211,13 @@ typedef enum
     SHADOWHOOK_MODE_UNIQUE = 1
 } shadowhook_mode_t;
 
-int shadowhook_init(shadowhook_mode_t mode, bool debuggable);
+int shadowhook_init(shadowhook_mode_t mode, bool debuggable, int nothing_fd);
 ```
 
 **参数**
 - `mode`：默认 hook 模式。
 - `debuggable`：是否开启调试日志。
+- `nothing_fd`（可为 `-1`）：已打开的 memfd 文件描述符，其内容为合法的 ELF，用于替代 `libshadowhook_nothing.so`。指定后 linker 通过 `android_dlopen_ext` 的 `ANDROID_DLEXT_USE_LIBRARY_FD` 从该 fd 加载，而不从磁盘读取（仅在 Android 5.0 及以上生效；加载成功后 fd 被 linker 消费，不要再关闭）。传 `-1` 时按常规从磁盘加载。
 
 **返回值**
 - `0`：成功
@@ -491,7 +493,7 @@ shadowhook 的 hook 和 intercept 一共提供了以下 API（不含 unhook 和 
         <td>通过「<strong>函数地址</strong>」指定 intercept 目标<br /><code>shadowhook_intercept_func_addr</code></td>
     </tr>
     <tr>
-        <td rowspan="3"><strong>有符号函数</strong></td>
+        <td rowspan="4"><strong>有符号函数</strong></td>
         <td>通过「<strong>有符号函数的地址</strong>」指定 hook 目标<br /><code>shadowhook_hook_sym_addr</code><br /><code>shadowhook_hook_sym_addr_2</code></td>
         <td>通过「<strong>有符号函数的地址</strong>」指定 intercept 目标<br /><code>shadowhook_intercept_sym_addr</code></td>
     </tr>
@@ -502,6 +504,10 @@ shadowhook 的 hook 和 intercept 一共提供了以下 API（不含 unhook 和 
     <tr>
         <td>通过「<strong>库名+函数名</strong>」指定 hook 目标，hook 完成后调用 callback<br /><code>shadowhook_hook_sym_name_callback</code><br /><code>shadowhook_hook_sym_name_callback_2<code></td>
         <td>通过「<strong>库名+函数名</strong>」指定 intercept 目标，intercept 完成后调用 callback<br /><code>shadowhook_intercept_sym_name_callback</code></td>
+    </tr>
+    <tr>
+        <td></td>
+        <td>通过「<strong>有符号函数 + 指令偏移</strong>」指定 intercept 目标，下钩前对偏移做指令边界校验<br /><code>shadowhook_intercept_sym_addr_offset</code><br /><code>shadowhook_intercept_sym_offset</code></td>
     </tr>
 </table>
 
@@ -1433,6 +1439,58 @@ void do_intercept(void) {
 #endif
 ```
 
+## 通过“有符号函数 + 指令偏移”指定 intercept 目标
+
+这组 API 结合“有符号函数”和“指令地址”：通过符号（地址，或库名 + 符号名）加函数内偏移指定目标。下钩前 shadowhook 会对偏移做校验，非法位置返回 `errno 46 - Invalid instruction offset in symbol`：
+
+- 偏移必须落在指令边界上（arm64：4 字节对齐；thumb：从符号起始处线性解码判定）。
+- 偏移必须在符号大小范围内，避免越界到下一个函数或函数尾部的 literal pool。
+- 目标位置的指令必须可安全重定位（thumb：不在 `IT` 块内部——块首除外，且不是 `BL` / `BLX` / `SVC`）。
+
+```C
+#include "shadowhook.h"
+
+// 变体：通过符号地址指定。`dlsym()` 类方式得到的 thumb 函数地址本身为奇数
+// （thumb bit 已置位），直接传入即可。
+void *shadowhook_intercept_sym_addr_offset(void *sym_addr, size_t offset, shadowhook_interceptor_t pre,
+                                           void *data, uint32_t flags);
+
+// 变体：通过库名 + 符号名指定。ELF 未加载时与其他 `*_sym_name*()` API 一样
+// 进入 pending（errno 1）；符号解析完成时会执行偏移校验。
+void *shadowhook_intercept_sym_offset(const char *lib_name, const char *sym_name, size_t offset,
+                                      shadowhook_interceptor_t pre, void *data, uint32_t flags);
+```
+
+### 参数
+
+- `sym_addr` / `lib_name` + `sym_name`（必须指定）：目标符号。
+- `offset`（必须指定）：符号内的指令偏移，从符号地址起按字节计。
+- `pre`、`data`、`flags`：与 `shadowhook_intercept_instr_addr()` 相同。
+
+### 返回值
+
+- 非 `NULL`：intercept 成功。返回值为 stub，可保存用于后续 unintercept。
+- `NULL`：intercept 失败。调用 `shadowhook_get_errno()` 获取 errno，再调用 `shadowhook_to_errmsg()` 获取 error message（`46` 表示偏移非法）。
+
+### 举例
+
+```C
+void my_interceptor(shadowhook_cpu_context_t *cpu_context, void *data) {
+    // 在被 intercept 的指令处读取/修改寄存器
+}
+
+void do_intercept(void) {
+    // intercept libcrypto.so 中 decrypt_block 函数内偏移 0x54 处的指令
+    void *stub = shadowhook_intercept_sym_offset("libcrypto.so", "decrypt_block", 0x54,
+                                                 my_interceptor, NULL, SHADOWHOOK_INTERCEPT_DEFAULT);
+    if (stub == NULL) {
+        int error_num = shadowhook_get_errno();
+        const char *error_msg = shadowhook_to_errmsg(error_num);
+        LOG("intercept failed: %p, %d - %s", stub, error_num, error_msg);
+    }
+}
+```
+
 ## unintercept
 
 ```C
@@ -1592,6 +1650,7 @@ void register_callback(void) {
 | 43 | Mode conflict | hook，unhook，intercept，unintercept 时，在当前目标地址上，发生了 unique 模式与其他模式之间的冲突（比如：当前地址上已经存在了 multi 或 shared 模式的代理函数，现在想要增加 unique 模式的代理函数） |
 | 44 | Duplicate multi hook | hook 时，发现在同一个目标地址上，在 multi 模式的代理函数链表中已经存在了一个相同地址的代理函数 |
 | 45 | Disabled | shadowhook 已经被全局禁用，导致操作失败 |
+| 46 | Invalid instruction offset in symbol | 通过「有符号函数 + 指令偏移」intercept 时偏移非法（不在指令边界上、超出符号大小、位于 thumb `IT` 块内部，或目标是 `BL`/`BLX`/`SVC` 指令） |
 | 100 | Load libshadowhook.so failed | 在 java 层执行 `System.loadLibrary("shadowhook");` 时，发生 JVM 异常 |
 | 101 | Init exception | 在 java 层通过 `nativeInit()` JNI 调用，执行 shadowhook 的 native 层初始化时，发生 JVM 异常 |
 

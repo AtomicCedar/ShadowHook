@@ -194,6 +194,7 @@ public class MySdk {
             .setDebuggable(false)
             .setRecordable(false)
             .setDisable(false)
+            .setNothingFd(-1)
             .build());
     }
 }
@@ -210,12 +211,13 @@ typedef enum
     SHADOWHOOK_MODE_UNIQUE = 1
 } shadowhook_mode_t;
 
-int shadowhook_init(shadowhook_mode_t mode, bool debuggable);
+int shadowhook_init(shadowhook_mode_t mode, bool debuggable, int nothing_fd);
 ```
 
 **Parameters**
 - `mode`: Default hook mode.
 - `debuggable`: Whether to enable debug logs.
+- `nothing_fd` (can be `-1`): File descriptor of an opened memfd containing a valid ELF to use for `libshadowhook_nothing.so`. When specified, the linker loads it via `android_dlopen_ext` with `ANDROID_DLEXT_USE_LIBRARY_FD` instead of reading from disk (only effective on Android 5.0 and above; the fd is consumed by the linker after a successful load and must not be closed). Pass `-1` to load from disk as usual.
 
 **Return Value**
 - `0`: Success
@@ -491,7 +493,7 @@ shadowhook's hook and intercept provide the following APIs (excluding unhook and
         <td>Specify intercept target via "<strong>function address</strong>"<br /><code>shadowhook_intercept_func_addr</code></td>
     </tr>
     <tr>
-        <td rowspan="3"><strong>Function with Symbol</strong></td>
+        <td rowspan="4"><strong>Function with Symbol</strong></td>
         <td>Specify hook target via "<strong>address of function with symbol</strong>"<br /><code>shadowhook_hook_sym_addr</code><br /><code>shadowhook_hook_sym_addr_2</code></td>
         <td>Specify intercept target via "<strong>address of function with symbol</strong>"<br /><code>shadowhook_intercept_sym_addr</code></td>
     </tr>
@@ -502,6 +504,10 @@ shadowhook's hook and intercept provide the following APIs (excluding unhook and
     <tr>
         <td>Specify hook target via "<strong>library name + function name</strong>", call callback after hook completes<br /><code>shadowhook_hook_sym_name_callback</code><br /><code>shadowhook_hook_sym_name_callback_2<code></td>
         <td>Specify intercept target via "<strong>library name + function name</strong>", call callback after intercept completes<br /><code>shadowhook_intercept_sym_name_callback</code></td>
+    </tr>
+    <tr>
+        <td></td>
+        <td>Specify intercept target via "<strong>function with symbol + instruction offset</strong>", validated against instruction boundaries before hooking<br /><code>shadowhook_intercept_sym_addr_offset</code><br /><code>shadowhook_intercept_sym_offset</code></td>
     </tr>
 </table>
 
@@ -1433,6 +1439,59 @@ void do_intercept(void) {
 #endif
 ```
 
+## Specifying intercept targets via "function with symbol + instruction offset"
+
+These APIs combine "function with symbol" and "instruction address": you specify a symbol (by address, or by library name + symbol name) plus an offset inside it. shadowhook validates the offset before hooking and rejects invalid positions with `errno 46 - Invalid instruction offset in symbol`:
+
+- The offset must fall on an instruction boundary (arm64: 4-byte aligned; thumb: determined by linear decoding from the symbol start).
+- The offset must be inside the symbol's size, so it won't accidentally reach the next function or a trailing literal pool.
+- The instruction at the target position must be safe to relocate (thumb: not inside an `IT` block except at the block start, and not `BL` / `BLX` / `SVC`).
+
+```C
+#include "shadowhook.h"
+
+// Variant: the symbol is specified by its address. `dlsym()`-style symbol
+// addresses of thumb functions are odd (thumb bit set); pass them as-is.
+void *shadowhook_intercept_sym_addr_offset(void *sym_addr, size_t offset, shadowhook_interceptor_t pre,
+                                           void *data, uint32_t flags);
+
+// Variant: the symbol is specified by library name + symbol name. If the ELF
+// is not loaded yet, the task will be pending (errno 1) like other
+// `*_sym_name*()` APIs; the offset is validated when the symbol is resolved.
+void *shadowhook_intercept_sym_offset(const char *lib_name, const char *sym_name, size_t offset,
+                                      shadowhook_interceptor_t pre, void *data, uint32_t flags);
+```
+
+### Parameters
+
+- `sym_addr` / `lib_name` + `sym_name` (required): The target symbol.
+- `offset` (required): Instruction offset inside the symbol, counted in bytes from the symbol address.
+- `pre`, `data`, `flags`: Same as `shadowhook_intercept_instr_addr()`.
+
+### Return Value
+
+- Non-`NULL`: Intercept successful. The return value is a stub that can be saved for later unintercept.
+- `NULL`: Intercept failed. Call `shadowhook_get_errno()` to get the errno, and then call `shadowhook_to_errmsg()` to get the error message (`46` means the offset is invalid).
+
+### Examples
+
+```C
+void my_interceptor(shadowhook_cpu_context_t *cpu_context, void *data) {
+    // read/modify registers at the intercepted instruction
+}
+
+void do_intercept(void) {
+    // intercept at offset 0x54 inside decrypt_block of libcrypto.so
+    void *stub = shadowhook_intercept_sym_offset("libcrypto.so", "decrypt_block", 0x54,
+                                                 my_interceptor, NULL, SHADOWHOOK_INTERCEPT_DEFAULT);
+    if (stub == NULL) {
+        int error_num = shadowhook_get_errno();
+        const char *error_msg = shadowhook_to_errmsg(error_num);
+        LOG("intercept failed: %p, %d - %s", stub, error_num, error_msg);
+    }
+}
+```
+
 ## Unintercept
 
 ```C
@@ -1592,6 +1651,7 @@ void register_callback(void) {
 | 43 | Mode conflict | When hooking, unhooking, intercepting, unintercepting, a conflict occurred between unique mode and other modes at the current target address (e.g., there are already multi or shared mode proxy functions at the current address, and now trying to add a unique mode proxy function) |
 | 44 | Duplicate multi hook | When hooking, found that a proxy function with the same address already exists in the multi mode proxy function linked list at the same target address |
 | 45 | Disabled | shadowhook has been globally disabled, causing the operation to fail |
+| 46 | Invalid instruction offset in symbol | When intercepting via "function with symbol + instruction offset", the offset is invalid (not on an instruction boundary, outside the symbol size, inside a thumb `IT` block, or at a `BL`/`BLX`/`SVC` instruction) |
 | 100 | Load libshadowhook.so failed | A JVM exception occurred when executing `System.loadLibrary("shadowhook");` in the Java layer |
 | 101 | Init exception | A JVM exception occurred when executing shadowhook's native layer initialization through the `nativeInit()` JNI call in the Java layer |
 
