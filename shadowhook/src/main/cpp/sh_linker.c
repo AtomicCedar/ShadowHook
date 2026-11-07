@@ -584,10 +584,15 @@ static int sh_linker_hook_call_ctors_dtors(sh_addr_info_t *call_ctors_addr_info,
     memset(&info, 0, sizeof(info));
     info.flags = ANDROID_DLEXT_USE_LIBRARY_FD;
     info.library_fd = nothing_fd;
-    handle = ((void *(*)(const char *, int, const android_dlextinfo *))dlsym(RTLD_DEFAULT, "android_dlopen_ext"))(
-        SH_LINKER_SHADOWHOOK_NOTHING_BASE_NAME, RTLD_NOW, &info);
+    void *(*android_dlopen_ext_func)(const char *, int, const android_dlextinfo *) =
+        (void *(*)(const char *, int, const android_dlextinfo *))dlsym(RTLD_DEFAULT, "android_dlopen_ext");
+    if (NULL == android_dlopen_ext_func) {
+      SH_LOG_ERROR("linker: android_dlopen_ext not found");
+      __atomic_store_n(&sh_linker_soinfo_offset_scan_tid, 0, __ATOMIC_RELEASE);
+      goto end;
+    }
+    handle = android_dlopen_ext_func(SH_LINKER_SHADOWHOOK_NOTHING_BASE_NAME, RTLD_NOW, &info);
     SH_LOG_INFO("linker: android_dlopen_ext nothing.so (fd %d) handle = %" PRIxPTR, nothing_fd, (uintptr_t)handle);
-    // fd is consumed by the linker; do not dlclose, the memfd backing is freed with the handle
   } else {
     handle = dlopen(SH_LINKER_SHADOWHOOK_NOTHING_BASE_NAME, RTLD_NOW);
     if (__predict_true(NULL != handle)) dlclose(handle);

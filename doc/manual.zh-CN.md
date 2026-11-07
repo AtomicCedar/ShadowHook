@@ -217,7 +217,7 @@ int shadowhook_init(shadowhook_mode_t mode, bool debuggable, int nothing_fd);
 **参数**
 - `mode`：默认 hook 模式。
 - `debuggable`：是否开启调试日志。
-- `nothing_fd`（可为 `-1`）：已打开的 memfd 文件描述符，其内容为合法的 ELF，用于替代 `libshadowhook_nothing.so`。指定后 linker 通过 `android_dlopen_ext` 的 `ANDROID_DLEXT_USE_LIBRARY_FD` 从该 fd 加载，而不从磁盘读取（仅在 Android 5.0 及以上生效；加载成功后 fd 被 linker 消费，不要再关闭）。传 `-1` 时按常规从磁盘加载。
+- `nothing_fd`（可为 `-1`）：已打开的 memfd 文件描述符，其内容为合法的 ELF，用于替代 `libshadowhook_nothing.so`。指定后 linker 通过 `android_dlopen_ext` 的 `ANDROID_DLEXT_USE_LIBRARY_FD` 从该 fd 加载，而不从磁盘读取（仅在 Android 5.0 及以上生效；fd 所有权仍属于调用方，初始化期间必须保持有效；初始化返回后，无论成功或失败，均由调用方在不再需要时关闭）。传 `-1` 时按常规从磁盘加载。
 
 **返回值**
 - `0`：成功
@@ -1444,7 +1444,7 @@ void do_intercept(void) {
 这组 API 结合“有符号函数”和“指令地址”：通过符号（地址，或库名 + 符号名）加函数内偏移指定目标。下钩前 shadowhook 会对偏移做校验，非法位置返回 `errno 46 - Invalid instruction offset in symbol`：
 
 - 偏移必须落在指令边界上（arm64：4 字节对齐；thumb：从符号起始处线性解码判定）。
-- 偏移必须在符号大小范围内，避免越界到下一个函数或函数尾部的 literal pool。
+- 偏移必须在符号大小范围内。该检查只能防止越过符号边界，不能识别符号内部的 literal pool；调用方必须选择真实指令。
 - 目标位置的指令必须可安全重定位（thumb：不在 `IT` 块内部——块首除外，且不是 `BL` / `BLX` / `SVC`）。
 
 ```C
@@ -1950,7 +1950,7 @@ void shadowhook_dump_records(int fd, uint32_t item_flags);
 
 ## intercept 问题
 
-- **对于指令序列中夹杂的“数据部分”，无法对它们进行拦截。** 这个应该是符合预期的。shadowhook 没有额外的逻辑去判断当前要执行 intercept 的目标地址上是“指令”还是“数据”，而是一律都认为是“指令”。请在调用 API 时不要传入“指向数据的地址”。`shadowhook_intercept_sym_addr_offset()` / `shadowhook_intercept_sym_offset()` 这组 API 可以部分规避该问题：它们会用符号大小校验偏移，目标符号尾部的 literal pool 会被 `errno 46` 拒绝，而不是被当作指令处理。
+- **对于指令序列中夹杂的“数据部分”，无法对它们进行拦截。** 这是预期限制。基于地址的 API 不会判断目标地址指向的是“指令”还是“数据”，而是统一按指令处理，请不要传入指向数据的地址。`shadowhook_intercept_sym_addr_offset()` / `shadowhook_intercept_sym_offset()` 这组 API 会做更严格的边界校验：超出符号大小的偏移返回 `errno 46`。这可以防止偏移越过符号边界，但符号元数据仍可能包含内嵌的 literal pool 数据，调用方不能选择这些数据偏移。
 
 - **在 32 位环境中，对于“连续的两条 2 字节的 thumb 指令”或者“一条 2 字节 thumb 指令紧跟着一条 4 字节 thumb 指令”的情况，shadowhook 无法同时对它们执行intercept（只拦截其中任意的一条指令不会有问题）。** 原因是 shadowhook 处理 intercept 时会将“目标地址处的指令修改为一条 4 字节的相对跳转指令”。理论上，这种情况可以处理，但是需要增加很多特别的处理逻辑。考虑到 ROI 和目前 32 位 arm 占比已经大幅减少，目前没有支持。如果以后业务上确实有这种需求，我们再支持。`shadowhook_intercept_sym_addr_offset()` / `shadowhook_intercept_sym_offset()` 这组 API 同样受此约束：单个偏移没有问题，但不支持同时对这样两个相邻位置做 intercept。
 

@@ -69,8 +69,8 @@ int sh_bound_check(uintptr_t sym_addr, size_t sym_size, size_t offset) {
       inst_len = 2;
       if ((inst & 0xFF00u) == 0xBF00u && (inst & 0x000Fu) != 0x0000u &&
           (inst & 0x00F0u) != 0x00F0u) {
-        // IT instruction (T1): valid masks always have bit3 set; block size
-        // = 4 - trailing zeros of the mask (ARM ARM), i.e. 1-4 instrs.
+        // IT instruction (T1): block size = 4 - trailing zeros of the
+        // nonzero mask (ARM ARM), i.e. 1-4 instructions.
         uint16_t mask = inst & 0x000Fu;
         it_block_remaining = (mask & 0x1u) ? 4 : (mask & 0x2u) ? 3 : (mask & 0x4u) ? 2 : 1;
         it_block_first = true;
@@ -86,9 +86,12 @@ int sh_bound_check(uintptr_t sym_addr, size_t sym_size, size_t offset) {
     bool cur_is_it = (2 == inst_len) && (inst & 0xFF00u) == 0xBF00u && (inst & 0x000Fu) != 0x0000u &&
                      (inst & 0x00F0u) != 0x00F0u;
     cur = (uint16_t *)((uintptr_t)cur + inst_len);
-    if (it_block_remaining > 0 && !cur_is_it) {
-      it_block_remaining--;
+    if (cur_is_it) {
+      // The IT instruction itself is only allowed when it is the target. Once
+      // the scan has passed it, every following member is inside the block.
       it_block_first = false;
+    } else if (it_block_remaining > 0) {
+      it_block_remaining--;
     }
   }
 
@@ -105,8 +108,8 @@ int sh_bound_check(uintptr_t sym_addr, size_t sym_size, size_t offset) {
     return SHADOWHOOK_ERRNO_BAD_OFFSET;
   }
 
-  // check the instruction at the target: reject BL/BLX/SVC and, best-effort,
-  // literal pool data.
+  // Check selected branch/system encodings at the target. This is not
+  // a code-versus-data classifier.
   uint16_t inst = *pc;
   if (sh_util_is_thumb32((uintptr_t)pc)) {
     uint16_t high = inst;
@@ -116,10 +119,7 @@ int sh_bound_check(uintptr_t sym_addr, size_t sym_size, size_t offset) {
       SH_LOG_WARN("sh_bound_check: thumb offset %zu is BL/BLX", offset);
       return SHADOWHOOK_ERRNO_BAD_OFFSET;
     }
-    // literal pool heuristic: a T32 LDR literal whose PC-relative target
-    // points forward (pools live after code) marks the pool start region;
-    // offsets landing in that region are rejected conservatively when the
-    // offset is beyond the last plausible instruction. Kept best-effort.
+
   } else {
     // T16 BL/BLX: 11100... / 11101... prefixes handled as 32-bit prefix above;
     // standalone T16 SVC: 11011111

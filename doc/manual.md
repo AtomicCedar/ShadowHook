@@ -217,7 +217,7 @@ int shadowhook_init(shadowhook_mode_t mode, bool debuggable, int nothing_fd);
 **Parameters**
 - `mode`: Default hook mode.
 - `debuggable`: Whether to enable debug logs.
-- `nothing_fd` (can be `-1`): File descriptor of an opened memfd containing a valid ELF to use for `libshadowhook_nothing.so`. When specified, the linker loads it via `android_dlopen_ext` with `ANDROID_DLEXT_USE_LIBRARY_FD` instead of reading from disk (only effective on Android 5.0 and above; the fd is consumed by the linker after a successful load and must not be closed). Pass `-1` to load from disk as usual.
+- `nothing_fd` (can be `-1`): File descriptor of an opened memfd containing a valid ELF to use for `libshadowhook_nothing.so`. When specified, the linker loads it via `android_dlopen_ext` with `ANDROID_DLEXT_USE_LIBRARY_FD` instead of reading from disk (only effective on Android 5.0 and above; the caller retains ownership of the fd, must keep it valid throughout initialization, and should close it afterward when no longer needed, regardless of success or failure). Pass `-1` to load from disk as usual.
 
 **Return Value**
 - `0`: Success
@@ -1444,7 +1444,7 @@ void do_intercept(void) {
 These APIs combine "function with symbol" and "instruction address": you specify a symbol (by address, or by library name + symbol name) plus an offset inside it. shadowhook validates the offset before hooking and rejects invalid positions with `errno 46 - Invalid instruction offset in symbol`:
 
 - The offset must fall on an instruction boundary (arm64: 4-byte aligned; thumb: determined by linear decoding from the symbol start).
-- The offset must be inside the symbol's size, so it won't accidentally reach the next function or a trailing literal pool.
+- The offset must be inside the symbol's size. This prevents crossing the symbol boundary, but does not identify literal-pool data inside the symbol; the caller must select an actual instruction.
 - The instruction at the target position must be safe to relocate (thumb: not inside an `IT` block except at the block start, and not `BL` / `BLX` / `SVC`).
 
 ```C
@@ -1952,7 +1952,7 @@ Note: Please enclose the operation record in double quotes.
 
 ## Intercept Issues
 
-- **For "data parts" interspersed in instruction sequences, they cannot be intercepted.** This should be expected. shadowhook doesn't have additional logic to determine whether the current target address for intercept is an "instruction" or "data," but always treats it as an "instruction." Please don't pass "addresses pointing to data" when calling the API. The `shadowhook_intercept_sym_addr_offset()` / `shadowhook_intercept_sym_offset()` APIs partially mitigate this: they validate the offset against the symbol size, so a trailing literal pool of the target symbol is rejected with `errno 46` instead of being treated as an instruction.
+- **For "data parts" interspersed in instruction sequences, they cannot be intercepted.** This should be expected. The address-based APIs do not determine whether the target address points to an instruction or data and treat it as an instruction. Please don't pass an address pointing to data. The `shadowhook_intercept_sym_addr_offset()` / `shadowhook_intercept_sym_offset()` APIs provide a stronger boundary check: they reject offsets outside the symbol size with `errno 46`. This prevents offsets beyond the symbol boundary, but symbol metadata may still include inline literal-pool data; callers must not select such data offsets.
 
 - **In 32-bit environments, for cases of "two consecutive 2-byte thumb instructions" or "a 2-byte thumb instruction immediately followed by a 4-byte thumb instruction," shadowhook cannot intercept them simultaneously (intercepting any one of them individually is fine).** The reason is that shadowhook modifies the instruction at the target address to a 4-byte relative jump instruction when handling intercept. Theoretically, this situation can be handled, but it requires adding many special handling logics. Considering ROI and the fact that the proportion of 32-bit arm has already significantly decreased, it's not currently supported. If there's a business need for this in the future, we'll support it then. This also applies to the `shadowhook_intercept_sym_addr_offset()` / `shadowhook_intercept_sym_offset()` APIs: each single offset is fine, but intercepting such two adjacent positions at the same time is not supported.
 

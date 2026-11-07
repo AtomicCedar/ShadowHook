@@ -313,7 +313,7 @@ public final class ShadowHook {
         private boolean debuggable;
         private boolean recordable;
         private boolean disable;
-        private int nothingFd;
+        private int nothingFd = -1;
 
         public Config() {
         }
@@ -359,8 +359,9 @@ public final class ShadowHook {
 
         /**
          * Set a memfd fd whose content is the libshadowhook_nothing.so ELF.
-         * The fd will be consumed by android_dlopen_ext and closed by the
-         * system linker on dlclose; pass -1 (default) to load from disk.
+         * The caller retains ownership of the fd. Keep it valid throughout
+         * init(), then close it when no longer needed, regardless of the result.
+         * Pass -1 (default) to load from disk.
          */
         public void setNothingFd(int nothingFd) {
             this.nothingFd = nothingFd;

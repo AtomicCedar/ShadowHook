@@ -37,7 +37,8 @@
 // - the instruction at the offset is safe to relocate:
 //   - arm64: always safe if boundary-aligned (rewrite engine handles PC-relative)
 //   - thumb: not inside an IT block (except at the IT block start),
-//            not BL/BLX/SVC, not in a detected literal pool
+//            subject to the branch/system-instruction checks below.
+// This check does not distinguish inline data from instructions.
 //
 // Returns 0 on success, or SHADOWHOOK_ERRNO_* on failure.
 int sh_bound_check(uintptr_t sym_addr, size_t sym_size, size_t offset);
